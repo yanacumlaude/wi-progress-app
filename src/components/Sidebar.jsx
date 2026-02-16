@@ -1,60 +1,57 @@
-// src/components/Sidebar.jsx
-import { LayoutDashboard, AlertTriangle, MessageSquare, ShieldCheck } from 'lucide-react';
+import React from "react";
+import { LayoutDashboard, Edit3, Shield, Search, FileWarning, MessageSquare } from "lucide-react";
 
-export default function Sidebar({ menu, setMenu }) {
+const Sidebar = ({ menu, setMenu }) => {
+  // Sesuaikan ID dengan logika di App.jsx
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'updated', label: 'Logo Progress', icon: ShieldCheck },
-    { id: 'findings', label: 'Findings', icon: AlertTriangle }, // Sesuaikan ID agar sinkron dengan App.jsx
-    { id: 'requests', label: 'Requests', icon: MessageSquare }, // Sesuaikan ID agar sinkron dengan App.jsx
+    { id: 'revisi', label: 'Revisi WI', icon: Edit3 },
+    { id: 'logo', label: 'Logo Progress', icon: Search },
+    { id: 'findings', label: 'Findings', icon: FileWarning },
+    { id: 'requests', label: 'Requests', icon: MessageSquare },
   ];
 
   return (
-    // PENTING: Hapus position: fixed, left: 0, dan z-index dari sini!
-    <div style={{ 
-      width: '140px', 
-      background: '#6c5ce7', 
-      height: '100vh', 
-      display: 'flex', 
-      flexDirection: 'column', 
-      padding: '20px 0', 
-      color: 'white'
-    }}>
-      <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-        <ShieldCheck size={40} />
-        <div style={{ fontSize: '10px', fontWeight: 'bold', marginTop: '5px' }}>WI MANAGER</div>
+    <div style={sideStyles.sidebar}>
+      <div style={sideStyles.logoSection}>
+        <Shield size={32} color="white" />
+        <h2 style={sideStyles.logoText}>WI MANAGER</h2>
       </div>
 
-      {menuItems.map((item) => {
-        const Icon = item.icon;
-        return (
-          <div
+      <div style={sideStyles.menuList}>
+        {menuItems.map((item) => (
+          <div 
             key={item.id}
-            onClick={() => setMenu(item.id)}
+            onClick={() => setMenu(item.id)} // INI KUNCINYA: Mengubah state di App.jsx
             style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              padding: '15px 0',
-              cursor: 'pointer',
-              transition: 'all 0.3s',
-              background: menu === item.id ? 'rgba(255,255,255,0.2)' : 'transparent',
-              borderRight: menu === item.id ? '4px solid white' : 'none',
-              marginBottom: '5px'
+              ...sideStyles.menuItem,
+              backgroundColor: menu === item.id ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
+              borderRight: menu === item.id ? '4px solid white' : 'none'
             }}
           >
-            <Icon size={22} color={menu === item.id ? "white" : "rgba(255,255,255,0.6)"} />
-            <span style={{ 
-              fontSize: '11px', 
-              marginTop: '8px',
-              fontWeight: menu === item.id ? 'bold' : 'normal',
-              color: menu === item.id ? "white" : "rgba(255,255,255,0.6)" 
-            }}>
-              {item.label}
-            </span>
+            <item.icon size={20} color="white" />
+            <span style={sideStyles.menuLabel}>{item.label}</span>
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
-}
+};
+
+const sideStyles = {
+  sidebar: { height: '100%', padding: '20px 0', display: 'flex', flexDirection: 'column' },
+  logoSection: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', marginBottom: '40px', padding: '0 20px' },
+  logoText: { color: 'white', fontSize: '14px', fontWeight: 'bold', margin: 0, textAlign: 'center' },
+  menuList: { display: 'flex', flexDirection: 'column', gap: '5px' },
+  menuItem: { 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '15px', 
+    padding: '15px 25px', 
+    cursor: 'pointer', 
+    transition: '0.3s' 
+  },
+  menuLabel: { color: 'white', fontSize: '14px', fontWeight: '500' }
+};
+
+export default Sidebar;
