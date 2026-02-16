@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
-import { FileText, CheckCircle, AlertCircle, Upload, Search, Menu, RefreshCw, Trash2 } from "lucide-react";
+import { FileText, CheckCircle, AlertCircle, Upload, Search, Menu, RefreshCw } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
+// Pastikan import ini ada!
 import Sidebar from "./components/Sidebar";
 import StatCard from "./components/StatCard";
 
 function App() {
   const [wiList, setWiList] = useState([]);
+  const [menu, setMenu] = useState("dashboard");
   const [searchTerm, setSearchTerm] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -33,7 +35,6 @@ function App() {
     fetchData();
   }, []);
 
-  // FUNGSI UPDATE STATUS / KONDISI
   const handleUpdate = async (id, field, currentValue) => {
     let newValue;
     if (field === 'status') newValue = currentValue === 'Open' ? 'Closed' : 'Open';
@@ -44,11 +45,8 @@ function App() {
       .update({ [field]: newValue })
       .eq('id', id);
 
-    if (error) {
-      alert("Gagal update: " + error.message);
-    } else {
-      fetchData(); // Refresh data setelah update
-    }
+    if (error) alert("Gagal update: " + error.message);
+    else fetchData();
   };
 
   const handleFileUpload = (e) => {
@@ -92,12 +90,18 @@ function App() {
 
   return (
     <div style={styles.container}>
-      <main className="main-content" style={{ width: '100%', padding: '20px' }}>
+      {/* SIDEBAR DENGAN WIDTH TETAP */}
+      <div style={styles.sidebarWrapper}>
+        <Sidebar menu={menu} setMenu={setMenu} />
+      </div>
+
+      {/* AREA UTAMA YANG BISA DI-SCROLL */}
+      <main style={styles.mainContent}>
         <header style={styles.header}>
           <h1 style={styles.title}>WI MANAGER PRO</h1>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button onClick={fetchData} style={styles.btnRefresh}>
-              <RefreshCw size={18} className={loading ? 'spin' : ''} />
+              <RefreshCw size={18} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
             </button>
             <label style={styles.btnImport}>
               <Upload size={18} /> <span>Import</span>
@@ -113,11 +117,14 @@ function App() {
         </div>
 
         <div style={styles.whiteBox}>
-          <input 
-            placeholder="Cari Part Number..." 
-            style={styles.inputSearch} 
-            onChange={(e) => setSearchTerm(e.target.value)} 
-          />
+          <div style={styles.searchBar}>
+            <Search size={18} color="#A3AED0" />
+            <input 
+              placeholder="Cari Part Number..." 
+              style={styles.inputSearch} 
+              onChange={(e) => setSearchTerm(e.target.value)} 
+            />
+          </div>
           <div style={styles.tableResponsive}>
             <table style={styles.table}>
               <thead>
@@ -161,17 +168,28 @@ function App() {
 }
 
 const styles = {
-  container: { display: 'flex', background: '#f4f7fe', minHeight: '100vh' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
-  title: { fontSize: '20px', color: '#1b2559', fontWeight: '800' },
-  btnImport: { background: '#4318FF', color: 'white', padding: '10px 15px', borderRadius: '12px', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '14px' },
-  btnRefresh: { background: 'white', border: '1px solid #ddd', padding: '10px', borderRadius: '12px', cursor: 'pointer' },
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '15px', marginBottom: '20px' },
-  whiteBox: { background: 'white', padding: '20px', borderRadius: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' },
-  inputSearch: { width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #E0E5F2', marginBottom: '15px', outline: 'none' },
+  container: { display: 'flex', background: '#f4f7fe', minHeight: '100vh', width: '100%' },
+  sidebarWrapper: { 
+    width: '260px', 
+    minWidth: '260px', 
+    backgroundColor: '#fff', 
+    borderRight: '1px solid #e0e5f2',
+    height: '100vh',
+    position: 'sticky',
+    top: 0
+  },
+  mainContent: { flex: 1, padding: '30px', overflowX: 'hidden' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
+  title: { fontSize: '24px', color: '#1b2559', fontWeight: '800', margin: 0 },
+  btnImport: { background: '#4318FF', color: 'white', padding: '10px 20px', borderRadius: '12px', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '14px', fontWeight: '700' },
+  btnRefresh: { background: 'white', border: '1px solid #E0E5F2', padding: '10px', borderRadius: '12px', cursor: 'pointer', color: '#4318FF' },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' },
+  whiteBox: { background: 'white', padding: '25px', borderRadius: '20px', boxShadow: '0px 18px 40px rgba(112, 144, 176, 0.12)' },
+  searchBar: { display: 'flex', alignItems: 'center', gap: '10px', background: '#F4F7FE', padding: '10px 15px', borderRadius: '30px', marginBottom: '20px', width: '300px' },
+  inputSearch: { border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '14px' },
   tableResponsive: { overflowX: 'auto' },
   table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' },
-  badge: { border: 'none', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px', transition: '0.2s' }
+  badge: { border: 'none', padding: '6px 16px', borderRadius: '10px', cursor: 'pointer', fontWeight: '700', fontSize: '12px' }
 };
 
 export default App;
