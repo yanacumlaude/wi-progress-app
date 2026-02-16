@@ -28,9 +28,15 @@ function App() {
     ticket_type: "Finding",
     requester_name: "",
     part_number: "",
+    area: "",
     description: "",
     priority: "Normal",
-    status: "Open"
+    status: "Open",
+    process_name: "",
+    mold_number: "",
+    model: "",
+    wi_process: "Finish Good",
+    location: "Production"
   });
 
   const fetchData = async () => {
@@ -71,7 +77,7 @@ function App() {
     } else {
       alert("Tiket Berhasil Terkirim!");
       setIsModalTicket(false);
-      setNewTicket({ ticket_type: "Finding", requester_name: "", part_number: "", description: "", priority: "Normal", status: "Open" });
+      setNewTicket({ ticket_type: "Finding", requester_name: "", part_number: "", area: "", description: "", priority: "Normal", status: "Open" });
       fetchData();
     }
   };
@@ -144,14 +150,30 @@ function App() {
                 style={modalStyles.input} placeholder="Nama Pelapor" required
                 onChange={e => setNewTicket({...newTicket, requester_name: e.target.value})}
               />
+              <input style={modalStyles.input} placeholder="Nama Proses" onChange={e => setNewTicket({...newTicket, process_name: e.target.value})} />
               <input 
-                style={modalStyles.input} placeholder="Part Number / Area" 
+                style={modalStyles.input} placeholder="Part Number" 
                 onChange={e => setNewTicket({...newTicket, part_number: e.target.value})}
               />
+              <input 
+                style={modalStyles.input} placeholder="Area / Lokasi (mis. Welding Line B)" 
+                onChange={e => setNewTicket({...newTicket, area: e.target.value})}
+              />
+              <input style={modalStyles.input} placeholder="Mold Number" onChange={e => setNewTicket({...newTicket, mold_number: e.target.value})} />
+              <input style={modalStyles.input} placeholder="Model" onChange={e => setNewTicket({...newTicket, model: e.target.value})} />
               <textarea 
                 style={{...modalStyles.input, height: '80px', resize: 'none'}} placeholder="Deskripsi Detail..." required
                 onChange={e => setNewTicket({...newTicket, description: e.target.value})}
               ></textarea>
+              <select style={modalStyles.input} value={newTicket.wi_process} onChange={e => setNewTicket({...newTicket, wi_process: e.target.value})}>
+                <option value="Finish Good">Finish Good</option>
+                <option value="2nd Process">2nd Process</option>
+              </select>
+              <select style={modalStyles.input} value={newTicket.location} onChange={e => setNewTicket({...newTicket, location: e.target.value})}>
+                <option value="Production">Production</option>
+                <option value="F&P">F&P</option>
+                <option value="Others">Others</option>
+              </select>
               <select 
                 style={modalStyles.input}
                 onChange={e => setNewTicket({...newTicket, priority: e.target.value})}

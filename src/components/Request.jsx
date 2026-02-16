@@ -1,28 +1,40 @@
 import React from "react";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Plus } from "lucide-react";
 
-export default function Request({ ticketList }) {
+export default function Request({ ticketList, onOpenTicket }) {
   const requestsData = ticketList?.filter(t => t.ticket_type?.toLowerCase().includes('request')) || [];
 
   return (
     <div style={{ width: '100%' }}>
       <header style={styles.header}>
-        <h1 style={styles.title}>USER REQUESTS</h1>
-        <p style={{color:'#707EAE'}}>Total {requestsData.length} permintaan</p>
+        <div>
+          <h1 style={styles.title}>USER REQUESTS</h1>
+          <p style={{color:'#707EAE'}}>Total {requestsData.length} permintaan</p>
+        </div>
+        <button onClick={() => onOpenTicket && onOpenTicket('Request')} style={styles.btnCreate}>
+          <Plus size={18} /> Create Request
+        </button>
       </header>
       <div style={styles.whiteBox}>
         <table style={styles.table}>
           <thead>
             <tr style={{color:'#A3AED0', borderBottom:'2px solid #F4F7FE'}}>
-              <th style={{padding:'12px'}}>TANGGAL</th><th>PELAPOR</th><th>PART NUMBER</th><th>STATUS</th>
+              <th style={{padding:'12px'}}>TANGGAL</th>
+              <th>PELAPOR</th>
+              <th>PROSES</th>
+              <th>PART NUMBER</th>
+              <th>LOKASI</th>
+              <th>STATUS</th>
             </tr>
           </thead>
           <tbody>
             {requestsData.length > 0 ? requestsData.map(t => (
-              <tr key={t.id} style={{borderBottom:'1px solid #F4F7FE'}}>
+                <tr key={t.id} style={{borderBottom:'1px solid #F4F7FE'}}>
                 <td style={{padding:'15px 0'}}>{new Date(t.created_at).toLocaleDateString()}</td>
                 <td>{t.requester_name}</td>
+                <td>{t.process_name ?? t.wi_process ?? '-'}</td>
                 <td>{t.part_number}</td>
+                <td>{t.area ?? t.location ?? '-'}</td>
                 <td><span style={{ fontWeight:'bold', color: t.status === 'Open' ? '#FFB800' : '#05CD99'}}>{t.status}</span></td>
               </tr>
             )) : <tr><td colSpan="4" style={{textAlign:'center', padding:'20px'}}>Data Requests Kosong</td></tr>}
