@@ -4,24 +4,21 @@ import { LayoutDashboard, AlertTriangle, MessageSquare, ShieldCheck } from 'luci
 export default function Sidebar({ menu, setMenu }) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'updated', label: 'Logo Progress', icon: ShieldCheck }, // MENU BARU DISINI
-    { id: 'issue', label: 'Findings', icon: AlertTriangle },
-    { id: 'request', label: 'Requests', icon: MessageSquare },
+    { id: 'updated', label: 'Logo Progress', icon: ShieldCheck },
+    { id: 'findings', label: 'Findings', icon: AlertTriangle }, // Sesuaikan ID agar sinkron dengan App.jsx
+    { id: 'requests', label: 'Requests', icon: MessageSquare }, // Sesuaikan ID agar sinkron dengan App.jsx
   ];
 
   return (
+    // PENTING: Hapus position: fixed, left: 0, dan z-index dari sini!
     <div style={{ 
       width: '140px', 
       background: '#6c5ce7', 
       height: '100vh', 
-      position: 'fixed', 
-      left: 0, 
-      top: 0, 
       display: 'flex', 
       flexDirection: 'column', 
       padding: '20px 0', 
-      color: 'white',
-      zIndex: 1000 
+      color: 'white'
     }}>
       <div style={{ textAlign: 'center', marginBottom: '40px' }}>
         <ShieldCheck size={40} />
@@ -29,7 +26,7 @@ export default function Sidebar({ menu, setMenu }) {
       </div>
 
       {menuItems.map((item) => {
-        const Icon = item.icon; // Pastikan pakai Huruf Kapital agar React mengenalinya sebagai komponen
+        const Icon = item.icon;
         return (
           <div
             key={item.id}
