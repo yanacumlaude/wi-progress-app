@@ -60,7 +60,6 @@ function App() {
 
   useEffect(() => { 
     fetchData();
-    // Inisialisasi awal untuk sidebar di HP
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   }, []);
 
@@ -139,22 +138,31 @@ function App() {
         {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
 
-      {/* Overlay Sidebar untuk HP agar user fokus saat menu terbuka */}
+      {/* 1. OVERLAY (Layar Hitam) - Z-Index 2500 */}
       {isSidebarOpen && window.innerWidth < 768 && (
         <div 
           onClick={() => setIsSidebarOpen(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2500 }}
+          style={{ 
+            position: 'fixed', 
+            inset: 0, 
+            background: 'rgba(0,0,0,0.6)', 
+            zIndex: 2500,
+            backdropFilter: 'blur(2px)'
+          }}
         />
       )}
 
+      {/* 2. SIDEBAR - Dibungkus Z-Index 3000 agar di depan Overlay */}
       {isSidebarOpen && (
-        <Sidebar 
-          menu={menu} 
-          setMenu={(m) => { 
-            setMenu(m); 
-            if(window.innerWidth < 768) setIsSidebarOpen(false); 
-          }} 
-        />
+        <div style={{ position: 'fixed', zIndex: 3000 }}>
+          <Sidebar 
+            menu={menu} 
+            setMenu={(m) => { 
+              setMenu(m); 
+              if(window.innerWidth < 768) setIsSidebarOpen(false); 
+            }} 
+          />
+        </div>
       )}
       
       <main style={{ 
@@ -188,7 +196,7 @@ function App() {
         </div>
       )}
 
-      {/* --- MODAL REVISI (DIBUAT LEBIH RESPONSIVE) --- */}
+      {/* --- MODAL REVISI --- */}
       {isModalRevisi && (
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, maxWidth: '700px'}}>
@@ -236,7 +244,7 @@ function App() {
         </div>
       )}
 
-      {/* --- MODAL CREATE TICKET --- */}
+      {/* --- MODAL TICKET --- */}
       {isModalTicket && (
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, width: '90%', maxWidth: '600px'}}>
@@ -281,7 +289,7 @@ function App() {
 
 const uiStyles = {
   mobileBtn: {
-    position: 'fixed', bottom: '20px', right: '20px', zIndex: 3000,
+    position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000,
     background: '#10B981', color: 'white', border: 'none', borderRadius: '50%',
     width: '56px', height: '56px', boxShadow: '0 4px 20px rgba(16, 185, 129, 0.4)',
     display: window.innerWidth < 768 ? 'flex' : 'none',
@@ -292,7 +300,7 @@ const uiStyles = {
 };
 
 const modalStyles = {
-  overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 4000, padding: '15px', backdropFilter: 'blur(2px)' },
+  overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, padding: '15px', backdropFilter: 'blur(2px)' },
   content: { background: 'white', padding: '20px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '95vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
   btnClose: { background: '#F1F5F9', border: 'none', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
