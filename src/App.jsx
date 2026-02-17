@@ -19,7 +19,7 @@ function App() {
   // --- STATE MODALS ---
   const [isModalInputWI, setIsModalInputWI] = useState(false);
   const [isModalTicket, setIsModalTicket] = useState(false);
-  const [isModalRevisi, setIsModalRevisi] = useState(false); // Modal Revisi Baru
+  const [isModalRevisi, setIsModalRevisi] = useState(false); 
   const [editMode, setEditMode] = useState(false);
   const [currentRevisiId, setCurrentRevisiId] = useState(null);
 
@@ -60,6 +60,7 @@ function App() {
 
   useEffect(() => { 
     fetchData();
+    // Inisialisasi awal untuk sidebar di HP
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   }, []);
 
@@ -129,31 +130,51 @@ function App() {
   };
 
   return (
-    <div style={{ display: 'flex', background: '#F8FAFC', minHeight: '100vh', width: '100%' }}>
+    <div style={{ display: 'flex', background: '#F8FAFC', minHeight: '100vh', width: '100%', overflowX: 'hidden' }}>
+      {/* Tombol Mobile Menu */}
       <button 
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
         style={uiStyles.mobileBtn}
       >
-        {isSidebarOpen ? <X /> : <Menu />}
+        {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
 
-      {isSidebarOpen && <Sidebar menu={menu} setMenu={(m) => { setMenu(m); if(window.innerWidth < 768) setIsSidebarOpen(false); }} />}
+      {/* Overlay Sidebar untuk HP agar user fokus saat menu terbuka */}
+      {isSidebarOpen && window.innerWidth < 768 && (
+        <div 
+          onClick={() => setIsSidebarOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2500 }}
+        />
+      )}
+
+      {isSidebarOpen && (
+        <Sidebar 
+          menu={menu} 
+          setMenu={(m) => { 
+            setMenu(m); 
+            if(window.innerWidth < 768) setIsSidebarOpen(false); 
+          }} 
+        />
+      )}
       
       <main style={{ 
         flex: 1, 
-        padding: '30px', 
+        padding: window.innerWidth < 768 ? '15px' : '30px', 
+        paddingTop: window.innerWidth < 768 ? '20px' : '30px',
         marginLeft: isSidebarOpen && window.innerWidth > 768 ? '260px' : '0',
-        transition: '0.3s'
+        transition: '0.3s',
+        width: '100%',
+        boxSizing: 'border-box'
       }}>
         {renderContent()}
       </main>
 
-      {/* --- MODAL INPUT MASTER WI --- */}
+      {/* --- MODAL MASTER WI --- */}
       {isModalInputWI && (
         <div style={modalStyles.overlay}>
           <div style={modalStyles.content}>
             <div style={modalStyles.header}>
-              <h3 style={{color: '#10B981'}}>Input Master WI Baru</h3>
+              <h3 style={{color: '#10B981', fontSize: '16px'}}>Input Master WI Baru</h3>
               <button onClick={() => setIsModalInputWI(false)} style={modalStyles.btnClose}>×</button>
             </div>
             <form onSubmit={handleSaveWI} style={modalStyles.formGrid}>
@@ -167,16 +188,16 @@ function App() {
         </div>
       )}
 
-      {/* --- MODAL REVISI & DISTRIBUSI (MENU KRUSIAL) --- */}
+      {/* --- MODAL REVISI (DIBUAT LEBIH RESPONSIVE) --- */}
       {isModalRevisi && (
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, maxWidth: '700px'}}>
             <div style={modalStyles.header}>
-              <h3 style={{color: '#10B981', margin: 0}}>{editMode ? 'Update Progres Revisi' : 'Input Distribusi Baru'}</h3>
+              <h3 style={{color: '#10B981', margin: 0, fontSize: '16px'}}>{editMode ? 'Update Progres Revisi' : 'Input Distribusi Baru'}</h3>
               <button onClick={() => setIsModalRevisi(false)} style={modalStyles.btnClose}>×</button>
             </div>
             <form onSubmit={handleSaveRevisi} style={{display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '10px'}}>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px'}}>
+              <div style={modalStyles.mobileGrid}>
                 <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Part Number</label>
                   <input style={modalStyles.input} value={newRevisi.part_number || ''} onChange={e=>setNewRevisi({...newRevisi, part_number: e.target.value})} required/></div>
                 <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Model</label>
@@ -184,7 +205,7 @@ function App() {
                 <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Customer</label>
                   <input style={modalStyles.input} value={newRevisi.customer || ''} onChange={e=>setNewRevisi({...newRevisi, customer: e.target.value})}/></div>
               </div>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px'}}>
+              <div style={modalStyles.mobileGrid}>
                 <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Tgl Revisi</label>
                   <input type="date" style={modalStyles.input} value={newRevisi.tgl_revisi || ''} onChange={e=>setNewRevisi({...newRevisi, tgl_revisi: e.target.value})}/></div>
                 <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>PIC Penerima</label>
@@ -192,7 +213,7 @@ function App() {
                 <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Qty Print</label>
                   <input type="number" style={modalStyles.input} value={newRevisi.qty_print || 0} onChange={e=>setNewRevisi({...newRevisi, qty_print: e.target.value})}/></div>
               </div>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+              <div style={modalStyles.mobileGridTwo}>
                 <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Location</label>
                   <select style={modalStyles.input} value={newRevisi.location || 'Production'} onChange={e=>setNewRevisi({...newRevisi, location: e.target.value})}>
                     <option value="Production">Production</option>
@@ -220,23 +241,23 @@ function App() {
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, width: '90%', maxWidth: '600px'}}>
             <div style={modalStyles.header}>
-              <h3 style={{color: '#10B981', margin: 0}}>Buat Tiket {newTicket.ticket_type}</h3>
+              <h3 style={{color: '#10B981', margin: 0, fontSize: '16px'}}>Buat Tiket {newTicket.ticket_type}</h3>
               <button onClick={() => setIsModalTicket(false)} style={modalStyles.btnClose}>×</button>
             </div>
             <form onSubmit={handleSaveTicket} style={{display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '10px'}}>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px'}}>
+              <div style={modalStyles.mobileGridTwo}>
                 <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Nama Pelapor</label>
                   <input style={modalStyles.input} placeholder="Nama Anda" required onChange={e => setNewTicket({...newTicket, requester_name: e.target.value})} /></div>
                 <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Nama Proses</label>
                   <input style={modalStyles.input} placeholder="Nama Proses" onChange={e => setNewTicket({...newTicket, process_name: e.target.value})} /></div>
               </div>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px'}}>
+              <div style={modalStyles.mobileGridTwo}>
                 <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Part Number</label>
                   <input style={modalStyles.input} placeholder="No. Part" required onChange={e => setNewTicket({...newTicket, part_number: e.target.value})} /></div>
                 <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Mold Number</label>
                   <input style={modalStyles.input} placeholder="No. Mold" onChange={e => setNewTicket({...newTicket, mold_number: e.target.value})} /></div>
               </div>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px'}}>
+              <div style={modalStyles.mobileGridTwo}>
                 <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Customer</label>
                   <input style={modalStyles.input} placeholder="Nama Customer" onChange={e => setNewTicket({...newTicket, customer: e.target.value})} /></div>
                 <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>WI Process</label>
@@ -262,7 +283,7 @@ const uiStyles = {
   mobileBtn: {
     position: 'fixed', bottom: '20px', right: '20px', zIndex: 3000,
     background: '#10B981', color: 'white', border: 'none', borderRadius: '50%',
-    width: '50px', height: '50px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+    width: '56px', height: '56px', boxShadow: '0 4px 20px rgba(16, 185, 129, 0.4)',
     display: window.innerWidth < 768 ? 'flex' : 'none',
     alignItems: 'center', justifyContent: 'center'
   },
@@ -271,14 +292,16 @@ const uiStyles = {
 };
 
 const modalStyles = {
-  overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, padding: '20px' },
-  content: { background: 'white', padding: '25px', borderRadius: '15px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' },
+  overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 4000, padding: '15px', backdropFilter: 'blur(2px)' },
+  content: { background: 'white', padding: '20px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '95vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
-  btnClose: { background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' },
-  formGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' },
-  input: { padding: '10px', borderRadius: '8px', border: '1px solid #E2E8F0', outline: 'none', fontSize: '14px' },
-  btnSaveWI: { gridColumn: 'span 2', background: '#10B981', color: 'white', padding: '12px', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
-  btnSaveTicket: { background: '#10B981', color: 'white', padding: '12px', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }
+  btnClose: { background: '#F1F5F9', border: 'none', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  formGrid: { display: 'grid', gridTemplateColumns: window.innerWidth < 600 ? '1fr' : '1fr 1fr', gap: '12px' },
+  mobileGrid: { display: 'grid', gridTemplateColumns: window.innerWidth < 600 ? '1fr' : '1fr 1fr 1fr', gap: '12px' },
+  mobileGridTwo: { display: 'grid', gridTemplateColumns: window.innerWidth < 600 ? '1fr' : '1fr 1fr', gap: '12px' },
+  input: { padding: '12px', borderRadius: '10px', border: '1px solid #E2E8F0', outline: 'none', fontSize: '14px', width: '100%', boxSizing: 'border-box' },
+  btnSaveWI: { gridColumn: window.innerWidth < 600 ? 'auto' : 'span 2', background: '#10B981', color: 'white', padding: '14px', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
+  btnSaveTicket: { background: '#10B981', color: 'white', padding: '14px', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }
 };
 
 export default App;
