@@ -1,66 +1,90 @@
-import React from "react";
+import React, { useState } from "react";
+import { FileText, Edit3, Plus, Search, Calendar, User, MapPin } from "lucide-react";
 
-export default function Revisi({ revisiList }) {
-  // Objek styles lokal agar tampilan tetap konsisten
-  const styles = {
-    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' },
-    title: { fontSize: '24px', fontWeight: '800', color: '#1B2559', margin: 0 },
-    whiteBox: { background: 'white', padding: '20px', borderRadius: '20px', boxShadow: '0px 18px 40px rgba(112, 144, 176, 0.08)' },
-    table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' },
-    statusBadge: (isDone) => ({
-      padding: '4px 10px',
-      borderRadius: '8px',
-      fontSize: '11px',
-      fontWeight: 'bold',
-      background: isDone ? '#E6F9F4' : '#FFF8E6',
-      color: isDone ? '#05CD99' : '#FFB800',
-      display: 'inline-block'
-    })
-  };
+export default function Revisi({ revisiList, onOpenModal, onEditRevisi }) {
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredRevisi = revisiList?.filter(r => 
+    r.part_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.model?.toLowerCase().includes(searchTerm.toLowerCase())
+  ) || [];
 
   return (
     <div style={{ width: '100%' }}>
       <header style={styles.header}>
         <div>
-          <h1 style={styles.title}>KONTROL REVISI WI</h1>
-          <p style={{ color: '#707EAE' }}>Monitoring distribusi revisi dokumen</p>
+          <h1 style={styles.title}>WI REVISION & DISTRIBUTION</h1>
+          <p style={{ color: '#64748B', fontSize: '14px' }}>Input dan monitoring distribusi dokumen lapangan</p>
         </div>
+        <button onClick={onOpenModal} style={styles.btnCreate}>
+          <Plus size={18} /> <span>Tambah Distribusi</span>
+        </button>
       </header>
 
-      <div style={styles.whiteBox}>
-        <table style={styles.table}>
-          <thead>
-            <tr style={{ color: '#A3AED0', borderBottom: '2px solid #F4F7FE' }}>
-              <th style={{ padding: '12px' }}>TGL REVISI</th>
-              <th>PART NAME / NO</th>
-              <th>DEPARTEMEN</th>
-              <th>STATUS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {revisiList && revisiList.length > 0 ? (
-              revisiList.map((r) => (
-                <tr key={r.id} style={{ borderBottom: '1px solid #F4F7FE' }}>
-                  <td style={{ padding: '15px 0' }}>{r.tgl_revisi}</td>
-                  <td style={{ fontWeight: '700', color: '#1B2559' }}>{r.part_name}</td>
-                  <td>{r.departemen}</td>
-                  <td>
-                    <div style={styles.statusBadge(!!r.tgl_distribusi)}>
-                      {r.tgl_distribusi ? `✅ Selesai (${r.tgl_distribusi})` : '⏳ Sedang Proses'}
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="4" style={{ textAlign: 'center', padding: '30px', color: '#A3AED0' }}>
-                  Belum ada data revisi yang tercatat.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div style={styles.filterBar}>
+        <div style={styles.searchBar}>
+          <Search size={18} color="#94A3B8" />
+          <input 
+            placeholder="Cari Part Number / Model..." 
+            style={styles.inputPlain}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div style={styles.grid}>
+        {filteredRevisi.length > 0 ? filteredRevisi.map((rev) => (
+          <div key={rev.id} style={styles.card}>
+            <div style={styles.cardHeader}>
+              <div style={styles.iconBox}><FileText size={20} color="#10B981" /></div>
+              <span style={styles.statusBadge(rev.status)}>{rev.status}</span>
+            </div>
+
+            <div style={styles.cardBody}>
+              <h4 style={styles.partNo}>{rev.part_number}</h4>
+              <p style={styles.modelText}>{rev.model} - {rev.part_name}</p>
+              
+              <div style={styles.detailGrid}>
+                <div style={styles.infoItem}><Calendar size={12}/> {rev.tgl_revisi || 'No Date'}</div>
+                <div style={styles.infoItem}><MapPin size={12}/> {rev.location}</div>
+                <div style={styles.infoItem}><User size={12}/> PIC: {rev.pic_penerima || '-'}</div>
+              </div>
+              
+              <p style={styles.desc}><strong>Ket:</strong> {rev.keterangan_revisi || '-'}</p>
+            </div>
+
+            <div style={styles.cardFooter}>
+              <div style={styles.qtyBox}>Qty: <strong>{rev.qty_print}</strong></div>
+              <button onClick={() => onEditRevisi(rev)} style={styles.btnEdit}>
+                <Edit3 size={14} /> Update Progres
+              </button>
+            </div>
+          </div>
+        )) : <div style={styles.empty}>Data distribusi tidak ditemukan.</div>}
       </div>
     </div>
   );
 }
+
+const styles = {
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' },
+  title: { fontSize: '22px', fontWeight: '800', color: '#0F172A', margin: 0 },
+  btnCreate: { background: '#10B981', color: 'white', padding: '10px 18px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' },
+  filterBar: { marginBottom: '20px' },
+  searchBar: { display: 'flex', alignItems: 'center', background: 'white', padding: '10px 15px', borderRadius: '12px', border: '1px solid #E2E8F0', gap: '10px', maxWidth: '400px' },
+  inputPlain: { border: 'none', outline: 'none', width: '100%', fontSize: '14px' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' },
+  card: { background: 'white', borderRadius: '16px', padding: '18px', border: '1px solid #F1F5F9', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px' },
+  iconBox: { padding: '8px', background: '#F0FDF4', borderRadius: '10px' },
+  statusBadge: (s) => ({ fontSize: '10px', fontWeight: 'bold', padding: '4px 10px', borderRadius: '20px', background: s === 'Distributed' ? '#F0FDF4' : '#FFFBEB', color: s === 'Distributed' ? '#10B981' : '#B45309' }),
+  partNo: { fontSize: '16px', fontWeight: '800', color: '#1E293B', margin: 0 },
+  modelText: { fontSize: '12px', color: '#64748B', marginBottom: '12px' },
+  detailGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' },
+  infoItem: { fontSize: '11px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px' },
+  desc: { fontSize: '12px', background: '#F8FAFC', padding: '8px', borderRadius: '8px', color: '#475569' },
+  cardFooter: { marginTop: '15px', paddingTop: '12px', borderTop: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  qtyBox: { fontSize: '12px', color: '#64748B' },
+  btnEdit: { background: '#F1F5F9', border: 'none', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', color: '#475569', fontWeight: '600' },
+  empty: { textAlign: 'center', gridColumn: '1/-1', padding: '50px', color: '#94A3B8' }
+};

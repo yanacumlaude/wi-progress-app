@@ -1,67 +1,137 @@
-import StatCard from "./StatCard"; 
-import { FileText, ClipboardList, AlertTriangle, RefreshCw } from "lucide-react";
+import React from "react";
+import { 
+  BarChart3, AlertCircle, CheckCircle2, FileEdit, 
+  ArrowUpRight, Clock, PlusCircle, LayoutDashboard, 
+  Activity, ShieldCheck, Layers, ClipboardList, ListTodo
+} from "lucide-react";
 
 export default function Dashboard({ wiList, ticketList, revisiList }) {
-  
-  // LOGIKA FILTER: Dibuat case-insensitive (tidak peduli huruf besar/kecil)
+  // Logic Filter Data untuk Progress
   const totalWI = wiList?.length || 0;
   
-  const openRequests = ticketList?.filter(t => 
-    t.ticket_type?.toLowerCase() === 'request' && 
-    (t.status?.toLowerCase() === 'open' || t.status === 'O')
-  ).length || 0;
+  // Progress Pipeline (Biar kelihatan kerjanya banyak step)
+  const inRevision = revisiList?.filter(r => r.status === 'In Progress').length || 0;
+  const readyToDistribute = revisiList?.filter(r => r.status === 'Ready' || !r.status).length || 0; // Tambahkan status 'Ready' di pikiran kita
+  const distributed = revisiList?.filter(r => r.status === 'Distributed').length || 0;
 
-  const totalFindings = ticketList?.filter(t => 
-    t.ticket_type?.toLowerCase() === 'finding'
-  ).length || 0;
-
-  // Pending Distribusi: jika tgl_distribusi kosong atau null
-  const pendingRevisi = revisiList?.filter(r => 
-    !r.tgl_distribusi || r.tgl_distribusi === "" || r.tgl_distribusi === "-"
-  ).length || 0;
-
-  // Hitung Persentase Sederhana untuk visual tambahan
-  const completionRate = totalWI > 0 ? ((revisiList?.filter(r => r.tgl_distribusi).length / totalWI) * 100).toFixed(1) : 0;
+  // Breakdown WI per Tipe (Contoh Informasi Tambahan)
+  const openFindings = ticketList?.filter(t => t.status === 'Open').length || 0;
 
   return (
-    <div style={{ width: '100%' }}>
+    <div style={styles.wrapper}>
+      {/* HEADER SECTION */}
       <header style={styles.header}>
-        <h1 style={styles.title}>DASHBOARD OVERVIEW</h1>
-        <div style={styles.dateBadge}>{new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+        <div>
+          <h1 style={styles.welcomeText}>WI PROGRESS TRACKER</h1>
+          <p style={styles.subText}>Transparansi Dokumen & Monitoring Temuan Lapangan</p>
+        </div>
+        <div style={styles.liveStatus}>
+          <div style={styles.statusDot}></div>
+          <span>SISTEM TERKONEKSI</span>
+        </div>
       </header>
-      
-      {/* Grid Statistik Utama */}
-      <div style={styles.statsGrid}>
-        <StatCard title="Total Master WI" value={totalWI} color="#4318FF" icon={FileText} />
-        <StatCard title="Open Requests" value={openRequests} color="#FFB800" icon={ClipboardList} />
-        <StatCard title="Field Findings" value={totalFindings} color="#EE5D50" icon={AlertTriangle} />
-        <StatCard title="Pending Distribusi" value={pendingRevisi} color="#05CD99" icon={RefreshCw} />
+
+      {/* 1. PROGRESS PIPELINE (Gantinya Distribution Rate) */}
+      <div style={styles.pipelineContainer}>
+        <div style={styles.pipelineHeader}>
+          <h3 style={styles.cardTitle}>ALUR PROSES DISTRIBUSI WI</h3>
+          <span style={styles.infoBadge}>Update Real-time</span>
+        </div>
+        <div style={styles.pipelineGrid}>
+          {/* Step 1 */}
+          <div style={styles.stepCard}>
+            <div style={{...styles.stepIcon, background: '#E0F2FE'}}><FileEdit size={20} color="#0EA5E9"/></div>
+            <div>
+              <p style={styles.stepLabel}>TAHAP REVISI</p>
+              <h2 style={styles.stepValue}>{inRevision} <span style={styles.unit}>Docs</span></h2>
+            </div>
+          </div>
+          <div style={styles.arrow}>→</div>
+          {/* Step 2 */}
+          <div style={styles.stepCard}>
+            <div style={{...styles.stepIcon, background: '#FFF7ED'}}><Clock size={20} color="#F97316"/></div>
+            <div>
+              <p style={styles.stepLabel}>SIAP DISTRIBUSI</p>
+              <h2 style={styles.stepValue}>{readyToDistribute} <span style={styles.unit}>Docs</span></h2>
+            </div>
+          </div>
+          <div style={styles.arrow}>→</div>
+          {/* Step 3 */}
+          <div style={styles.stepCard}>
+            <div style={{...styles.stepIcon, background: '#DCFCE7'}}><CheckCircle2 size={20} color="#22C55E"/></div>
+            <div>
+              <p style={styles.stepLabel}>TERPASANG DI LINE</p>
+              <h2 style={styles.stepValue}>{distributed} <span style={styles.unit}>Docs</span></h2>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Visual Tambahan: Status Progress WI */}
-      <div style={styles.infoSection}>
-        <div style={styles.infoBox}>
-          <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px'}}>
-            <span style={styles.infoLabel}>WI Distribution Rate</span>
-            <span style={styles.infoValue}>{completionRate}%</span>
+      {/* 2. SUMMARY CARDS */}
+      <div style={styles.statsGrid}>
+        <div style={styles.statCard}>
+          <div style={styles.statContent}>
+            <p style={styles.statLabel}>DATABASE MASTER WI</p>
+            <h3 style={styles.statValue}>{totalWI}</h3>
           </div>
-          <div style={styles.progressBarBg}>
-            <div style={{...styles.progressBarFill, width: `${completionRate}%`}}></div>
+          <Layers color="#6366F1" size={32} opacity={0.2} />
+        </div>
+        <div style={styles.statCard}>
+          <div style={styles.statContent}>
+            <p style={styles.statLabel}>OPEN FINDINGS (TEMUAN)</p>
+            <h3 style={{...styles.statValue, color: '#EF4444'}}>{openFindings}</h3>
           </div>
-          <p style={styles.infoSub}>Persentase WI yang sudah terdistribusi dari total revisi.</p>
+          <AlertCircle color="#EF4444" size={32} opacity={0.2} />
+        </div>
+      </div>
+
+      {/* 3. LOWER SECTION: LIST & SUMMARY */}
+      <div style={styles.mainGrid}>
+        {/* Table Activity - Memperlihatkan apa yang paling baru dikerjakan */}
+        <div style={styles.tableCard}>
+          <h3 style={styles.cardTitle}>AKTIVITAS TERKINI (LAPANGAN)</h3>
+          <table style={styles.table}>
+            <thead>
+              <tr style={styles.trHead}>
+                <th>PART NUMBER</th>
+                <th>MODEL</th>
+                <th>JENIS WI</th>
+                <th>PROGRES</th>
+              </tr>
+            </thead>
+            <tbody>
+              {revisiList?.slice(0, 5).map(r => (
+                <tr key={r.id} style={styles.trBody}>
+                  <td style={{fontWeight: 'bold'}}>{r.part_number}</td>
+                  <td>{r.model}</td>
+                  <td>{r.wi_type || 'FG'}</td>
+                  <td>
+                    <span style={styles.statusBadge(r.status)}>{r.status || 'Ready'}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        <div style={styles.infoBox}>
-          <h4 style={styles.infoLabel}>Quick Summary</h4>
-          <div style={{display: 'flex', gap: '20px', marginTop: '15px'}}>
-            <div>
-              <div style={{fontSize: '20px', fontWeight: 'bold', color: '#1B2559'}}>{ticketList?.length || 0}</div>
-              <div style={{fontSize: '12px', color: '#A3AED0'}}>Total Tickets</div>
-            </div>
-            <div style={{borderLeft: '1px solid #E0E5F2', paddingLeft: '20px'}}>
-              <div style={{fontSize: '20px', fontWeight: 'bold', color: '#1B2559'}}>{revisiList?.length || 0}</div>
-              <div style={{fontSize: '12px', color: '#A3AED0'}}>Total History Revisi</div>
-            </div>
+        {/* Executive Summary - PENGGANTI SYSTEM LOG */}
+        <div style={styles.summaryCard}>
+          <h3 style={{...styles.cardTitle, color: 'white'}}>EXECUTIVE SUMMARY</h3>
+          <div style={styles.summaryItem}>
+            <div style={styles.bullet}></div>
+            <p><strong>{inRevision} WI</strong> sedang dalam proses update konten teknis.</p>
+          </div>
+          <div style={styles.summaryItem}>
+            <div style={styles.bullet}></div>
+            <p><strong>{openFindings} Temuan</strong> sedang menunggu verifikasi dari team produksi.</p>
+          </div>
+          <div style={styles.summaryItem}>
+            <div style={styles.bullet}></div>
+            <p>Fokus minggu ini: Distribusi area <strong>{revisiList[0]?.location || 'Line Utama'}</strong>.</p>
+          </div>
+          
+          <div style={styles.tipBox}>
+             <p><em>*Data ini adalah rangkuman dari progres harian di lapangan.</em></p>
           </div>
         </div>
       </div>
@@ -70,25 +140,43 @@ export default function Dashboard({ wiList, ticketList, revisiList }) {
 }
 
 const styles = {
-  header: { 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: '30px' 
-  },
-  title: { fontSize: '24px', fontWeight: '800', color: '#1B2559', margin: 0 },
-  dateBadge: { background: 'white', padding: '8px 16px', borderRadius: '10px', fontSize: '12px', color: '#707EAE', fontWeight: 'bold', boxShadow: '0px 4px 12px rgba(0,0,0,0.03)' },
-  statsGrid: { 
-    display: 'grid', 
-    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', 
-    gap: '20px',
-    marginBottom: '25px'
-  },
-  infoSection: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' },
-  infoBox: { background: 'white', padding: '25px', borderRadius: '20px', boxShadow: '0px 18px 40px rgba(112, 144, 176, 0.08)' },
-  infoLabel: { fontSize: '14px', fontWeight: 'bold', color: '#707EAE' },
-  infoValue: { fontSize: '18px', fontWeight: '800', color: '#4318FF' },
-  infoSub: { fontSize: '12px', color: '#A3AED0', marginTop: '10px' },
-  progressBarBg: { width: '100%', height: '8px', background: '#F4F7FE', borderRadius: '10px', overflow: 'hidden' },
-  progressBarFill: { height: '100%', background: '#4318FF', borderRadius: '10px', transition: '0.5s ease-in-out' }
+  wrapper: { display: 'flex', flexDirection: 'column', gap: '20px', animation: 'fadeIn 0.5s' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  welcomeText: { fontSize: '22px', fontWeight: '900', color: '#1E293B', margin: 0 },
+  subText: { color: '#64748B', fontSize: '13px' },
+  liveStatus: { display: 'flex', alignItems: 'center', gap: '8px', background: 'white', padding: '6px 12px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold', border: '1px solid #E2E8F0' },
+  statusDot: { width: '8px', height: '8px', background: '#22C55E', borderRadius: '50%', boxShadow: '0 0 8px #22C55E' },
+  
+  pipelineContainer: { background: 'white', padding: '25px', borderRadius: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' },
+  pipelineHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '20px' },
+  cardTitle: { fontSize: '14px', fontWeight: '800', color: '#475569' },
+  infoBadge: { background: '#F1F5F9', padding: '4px 10px', borderRadius: '6px', fontSize: '10px', color: '#64748B' },
+  pipelineGrid: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  stepCard: { display: 'flex', alignItems: 'center', gap: '15px', flex: 1 },
+  stepIcon: { padding: '12px', borderRadius: '12px' },
+  stepLabel: { fontSize: '10px', fontWeight: '800', color: '#94A3B8', margin: 0 },
+  stepValue: { fontSize: '20px', fontWeight: '800', color: '#1E293B', margin: 0 },
+  unit: { fontSize: '12px', fontWeight: '400', color: '#64748B' },
+  arrow: { color: '#CBD5E1', fontWeight: 'bold', padding: '0 10px' },
+
+  statsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' },
+  statCard: { background: 'white', padding: '20px', borderRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  statLabel: { fontSize: '11px', fontWeight: '800', color: '#94A3B8' },
+  statValue: { fontSize: '28px', fontWeight: '800', margin: '5px 0' },
+
+  mainGrid: { display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '20px' },
+  tableCard: { background: 'white', padding: '25px', borderRadius: '20px' },
+  table: { width: '100%', borderCollapse: 'collapse', marginTop: '15px' },
+  trHead: { textAlign: 'left', fontSize: '11px', color: '#94A3B8', borderBottom: '1px solid #F1F5F9' },
+  trBody: { borderBottom: '1px solid #F1F5F9', fontSize: '13px' },
+  statusBadge: (s) => ({
+    fontSize: '10px', fontWeight: 'bold', padding: '4px 8px', borderRadius: '6px',
+    background: s === 'Distributed' ? '#DCFCE7' : '#FEF3C7',
+    color: s === 'Distributed' ? '#166534' : '#92400E'
+  }),
+
+  summaryCard: { background: '#1E293B', padding: '25px', borderRadius: '25px', color: 'white' },
+  summaryItem: { display: 'flex', gap: '12px', marginBottom: '15px', alignItems: 'flex-start' },
+  bullet: { width: '6px', height: '6px', background: '#38BDF8', borderRadius: '50%', marginTop: '6px' },
+  tipBox: { marginTop: '20px', padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', fontSize: '11px', color: '#94A3B8' }
 };
