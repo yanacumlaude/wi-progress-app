@@ -1,7 +1,8 @@
 import React from "react";
-import { MessageSquare, Plus, User, ArrowRight } from "lucide-react";
+import { MessageSquare, Plus, User, ArrowRight, Clock, CheckCircle } from "lucide-react";
 
-export default function Request({ ticketList, onOpenTicket }) {
+// TAMBAHKAN onUpdateStatus di props
+export default function Request({ ticketList, onOpenTicket, onUpdateStatus }) {
   const requestsData = ticketList?.filter(t => t.ticket_type?.toLowerCase().includes('request')) || [];
 
   return (
@@ -42,15 +43,19 @@ export default function Request({ ticketList, onOpenTicket }) {
                     <div style={{ fontSize: '12px', color: '#64748B' }}>{t.process_name || t.wi_process || '-'}</div>
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <span style={{ 
-                      fontWeight: 'bold', 
-                      fontSize: '11px',
-                      padding: '4px 12px',
-                      borderRadius: '20px',
-                      background: t.status === 'Open' ? '#FFFBEB' : '#F0FDF4',
-                      color: t.status === 'Open' ? '#B45309' : '#10B981',
-                      border: `1px solid ${t.status === 'Open' ? '#FEF3C7' : '#DCFCE7'}`
-                    }}>
+                    {/* MODIFIKASI: Tambahkan onClick untuk Toggle Status */}
+                    <span 
+                      onClick={() => onUpdateStatus(t.id, t.status)}
+                      style={{ 
+                        ...styles.statusBadge(t.status),
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="Klik untuk ubah status"
+                    >
+                      {t.status?.toLowerCase() === 'open' ? <Clock size={12} /> : <CheckCircle size={12} />}
                       {t.status}
                     </span>
                   </td>
@@ -73,5 +78,16 @@ const styles = {
   tableHead: { color: '#64748B', borderBottom: '1px solid #F1F5F9', backgroundColor: '#F8FAFC' },
   tableRow: { borderBottom: '1px solid #F1F5F9' },
   avatar: { width: '24px', height: '24px', background: '#E2E8F0', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 'bold', color: '#64748B' },
-  empty: { textAlign: 'center', padding: '30px', color: '#94A3B8' }
+  empty: { textAlign: 'center', padding: '30px', color: '#94A3B8' },
+  // Refactor style badge ke fungsi agar lebih bersih
+  statusBadge: (status) => ({
+    fontWeight: 'bold', 
+    fontSize: '11px',
+    padding: '4px 12px',
+    borderRadius: '20px',
+    background: status === 'Open' ? '#FFFBEB' : '#F0FDF4',
+    color: status === 'Open' ? '#B45309' : '#10B981',
+    border: `1px solid ${status === 'Open' ? '#FEF3C7' : '#DCFCE7'}`,
+    transition: '0.2s'
+  })
 };

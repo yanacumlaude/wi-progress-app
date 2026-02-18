@@ -1,7 +1,8 @@
 import React from "react";
 import { AlertTriangle, Clock, CheckCircle, MapPin, Tag, Plus } from "lucide-react";
 
-export default function Findings({ ticketList, onOpenTicket }) {
+// TAMBAHKAN onUpdateStatus di props
+export default function Findings({ ticketList, onOpenTicket, onUpdateStatus }) {
   const findingsData = ticketList?.filter(t => 
     t.ticket_type?.toLowerCase().includes('finding')
   ) || [];
@@ -51,7 +52,12 @@ export default function Findings({ ticketList, onOpenTicket }) {
                     </div>
                   </td>
                   <td>
-                    <div style={styles.statusBox(t.status)}>
+                    {/* MODIFIKASI: Tambahkan onClick dan pointer cursor */}
+                    <div 
+                      onClick={() => onUpdateStatus(t.id, t.status)}
+                      style={{...styles.statusBox(t.status), cursor: 'pointer'}}
+                      title="Klik untuk ubah status"
+                    >
                       {t.status?.toLowerCase() === 'open' ? <Clock size={14} /> : <CheckCircle size={14} />}
                       {t.status}
                     </div>
@@ -80,12 +86,13 @@ const styles = {
     display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', width: 'fit-content',
     background: status?.toLowerCase() === 'open' ? '#FEF2F2' : '#F0FDF4',
     color: status?.toLowerCase() === 'open' ? '#EF4444' : '#10B981',
-    border: `1px solid ${status?.toLowerCase() === 'open' ? '#FEE2E2' : '#DCFCE7'}`
+    border: `1px solid ${status?.toLowerCase() === 'open' ? '#FEE2E2' : '#DCFCE7'}`,
+    transition: '0.2s' // Tambahan biar smooth saat diklik
   }),
   priorityBadge: (priority) => ({
     padding: '4px 10px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', width: 'fit-content',
-    background: priority === 'High' ? '#EF4444' : '#F1F5F9',
-    color: priority === 'High' ? 'white' : '#475569'
+    background: priority === 'High' || priority === 'Critical' ? '#EF4444' : '#F1F5F9',
+    color: priority === 'High' || priority === 'Critical' ? 'white' : '#475569'
   }),
   empty: { textAlign: 'center', padding: '40px', color: '#94A3B8' }
 };
