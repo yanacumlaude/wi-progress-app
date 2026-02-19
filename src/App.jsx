@@ -23,7 +23,7 @@ function App() {
   const [editMode, setEditMode] = useState(false);
   const [currentRevisiId, setCurrentRevisiId] = useState(null);
 
-  // --- DATA STATES (Inisialisasi Lengkap) ---
+  // --- DATA STATES ---
   const initialTicket = {
     ticket_type: "Finding", requester_name: "", part_number: "", area: "", 
     description: "", priority: "Normal", status: "Open", process_name: "",
@@ -81,10 +81,14 @@ function App() {
     else { alert("Tiket Berhasil Terkirim!"); setIsModalTicket(false); fetchData(); }
   };
 
-  const handleUpdateTicketStatus = async (id, currentStatus) => {
-    const nextStatus = currentStatus === 'Open' ? 'Closed' : 'Open';
-    const { error } = await supabase.from('wi_tickets').update({ status: nextStatus }).eq('id', id);
-    if (error) alert(error.message);
+  // FIXED: Fungsi ini sekarang menerima targetStatus dari klik titik Stepper
+  const handleUpdateTicketStatus = async (id, targetStatus) => {
+    const { error } = await supabase
+      .from('wi_tickets')
+      .update({ status: targetStatus })
+      .eq('id', id);
+
+    if (error) alert("Gagal update status: " + error.message);
     else fetchData();
   };
 
@@ -101,7 +105,8 @@ function App() {
     }
   };
 
-  const handleUpdateStatus = async (id, currentStatus) => {
+  // Handler untuk status O/C di Master WI (Menu Logo)
+  const handleUpdateLogoStatus = async (id, currentStatus) => {
     const nextStatus = currentStatus === 'O' ? 'C' : 'O';
     const { error } = await supabase.from('wi_data').update({ status_oc: nextStatus }).eq('id', id);
     if (error) alert(error.message);
@@ -116,33 +121,19 @@ function App() {
   };
 
   const renderContent = () => {
-    const props = {
-      dashboard: { wiList, ticketList, revisiList },
-      logo: { wiList, onOpenModal: () => setIsModalInputWI(true), onUpdateStatus: handleUpdateStatus },
-      findings: { 
-        ticketList, 
-        onUpdateStatus: handleUpdateTicketStatus,
-        onOpenTicket: (type) => { setNewTicket({...initialTicket, ticket_type: type}); setIsModalTicket(true); } 
-      },
-      requests: { 
-        ticketList, 
-        onUpdateStatus: handleUpdateTicketStatus,
-        onOpenTicket: (type) => { setNewTicket({...initialTicket, ticket_type: type}); setIsModalTicket(true); } 
-      },
-      revisi: { 
-        revisiList, 
-        onOpenModal: () => { setEditMode(false); setNewRevisi(initialRevisi); setIsModalRevisi(true); },
-        onEditRevisi 
-      }
-    };
-
     switch (menu) {
-      case "dashboard": return <Dashboard {...props.dashboard} />;
-      case "logo": return <LogoProgress {...props.logo} />;
-      case "revisi": return <Revisi {...props.revisi} />;
-      case "findings": return <Findings {...props.findings} />;
-      case "requests": return <Request {...props.requests} />;
-      default: return <Dashboard {...props.dashboard} />;
+      case "dashboard": 
+        return <Dashboard wiList={wiList} ticketList={ticketList} revisiList={revisiList} />;
+      case "logo": 
+        return <LogoProgress wiList={wiList} onOpenModal={() => setIsModalInputWI(true)} onUpdateStatus={handleUpdateLogoStatus} />;
+      case "revisi": 
+        return <Revisi revisiList={revisiList} onOpenModal={() => { setEditMode(false); setNewRevisi(initialRevisi); setIsModalRevisi(true); }} onEditRevisi={onEditRevisi} />;
+      case "findings": 
+        return <Findings ticketList={ticketList} onUpdateStatus={handleUpdateTicketStatus} onOpenTicket={(type) => { setNewTicket({...initialTicket, ticket_type: type}); setIsModalTicket(true); }} />;
+      case "requests": 
+        return <Request ticketList={ticketList} onUpdateStatus={handleUpdateTicketStatus} onOpenTicket={(type) => { setNewTicket({...initialTicket, ticket_type: type}); setIsModalTicket(true); }} />;
+      default: 
+        return <Dashboard wiList={wiList} ticketList={ticketList} revisiList={revisiList} />;
     }
   };
 
@@ -185,7 +176,7 @@ function App() {
         </div>
       )}
 
-      {/* --- MODAL REVISI (UPDATE LENGKAP) --- */}
+      {/* --- MODAL REVISI --- */}
       {isModalRevisi && (
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, maxWidth: '750px'}}>
@@ -279,7 +270,6 @@ function App() {
   );
 }
 
-// STYLES TETAP SAMA (SUDAH DI OPTIMASI)
 const uiStyles = {
   mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', boxShadow: '0 4px 20px rgba(16, 185, 129, 0.4)', display: window.innerWidth < 768 ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center' },
   formGroup: { display: 'flex', flexDirection: 'column', gap: '5px' },
