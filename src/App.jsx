@@ -1,15 +1,17 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import Sidebar from "./components/Sidebar";
-import { Menu, X } from "lucide-react";
+import { Menu, X, ShieldCheck, HardHat, LogOut } from "lucide-react";
 
 import Dashboard from "./components/Dashboard";
 import LogoProgress from "./components/LogoProgress";
 import Request from "./components/Request";
 import Findings from "./components/Findings";
 import Revisi from "./components/Revisi";
+import WICenterLibrary from "./components/WICenterLibrary"; 
 
 function App() {
+  const [role, setRole] = useState("guest"); // guest, admin, operator
   const [menu, setMenu] = useState("dashboard");
   const [wiList, setWiList] = useState([]);
   const [revisiList, setRevisiList] = useState([]);
@@ -41,7 +43,8 @@ function App() {
   const [newWI, setNewWI] = useState({
     customer: "", date_created: "", part_number: "", mold_number: "",
     model: "", is_logo_updated: false, is_6_sisi: false,
-    condition: "Bagus", remarks: "", status_oc: "O", location: ""
+    condition: "Bagus", remarks: "", status_oc: "O", location: "",
+    file_url: "" 
   });
 
   const [newTicket, setNewTicket] = useState(initialTicket);
@@ -81,7 +84,6 @@ function App() {
     else { alert("Tiket Berhasil Terkirim!"); setIsModalTicket(false); fetchData(); }
   };
 
-  // FIXED: Fungsi ini sekarang menerima targetStatus dari klik titik Stepper
   const handleUpdateTicketStatus = async (id, targetStatus) => {
     const { error } = await supabase
       .from('wi_tickets')
@@ -105,7 +107,6 @@ function App() {
     }
   };
 
-  // Handler untuk status O/C di Master WI (Menu Logo)
   const handleUpdateLogoStatus = async (id, currentStatus) => {
     const nextStatus = currentStatus === 'O' ? 'C' : 'O';
     const { error } = await supabase.from('wi_data').update({ status_oc: nextStatus }).eq('id', id);
@@ -121,24 +122,74 @@ function App() {
   };
 
   const renderContent = () => {
+    // Jika role operator klik menu selain revisi, arahkan ke Library agar tidak terjebak di dashboard kosong
+    const isOperator = role === 'operator';
+
     switch (menu) {
       case "dashboard": 
-        return <Dashboard wiList={wiList} ticketList={ticketList} revisiList={revisiList} />;
+        return <Dashboard wiList={wiList} ticketList={ticketList} revisiList={revisiList} role={role} />;
+      
+      case "library": 
+        return <WICenterLibrary wiList={wiList} role={role} />;
+
       case "logo": 
-        return <LogoProgress wiList={wiList} onOpenModal={() => setIsModalInputWI(true)} onUpdateStatus={handleUpdateLogoStatus} />;
+        return role === 'admin' ? 
+          <LogoProgress wiList={wiList} onOpenModal={() => setIsModalInputWI(true)} onUpdateStatus={handleUpdateLogoStatus} /> : 
+          <WICenterLibrary wiList={wiList} role={role} />;
+
       case "revisi": 
         return <Revisi revisiList={revisiList} onOpenModal={() => { setEditMode(false); setNewRevisi(initialRevisi); setIsModalRevisi(true); }} onEditRevisi={onEditRevisi} />;
+      
       case "findings": 
-        return <Findings ticketList={ticketList} onUpdateStatus={handleUpdateTicketStatus} onOpenTicket={(type) => { setNewTicket({...initialTicket, ticket_type: type}); setIsModalTicket(true); }} />;
+        return role === 'admin' ? 
+          <Findings ticketList={ticketList} onUpdateStatus={handleUpdateTicketStatus} onOpenTicket={(type) => { setNewTicket({...initialTicket, ticket_type: type}); setIsModalTicket(true); }} /> : 
+          <WICenterLibrary wiList={wiList} role={role} />;
+
       case "requests": 
-        return <Request ticketList={ticketList} onUpdateStatus={handleUpdateTicketStatus} onOpenTicket={(type) => { setNewTicket({...initialTicket, ticket_type: type}); setIsModalTicket(true); }} />;
+        return role === 'admin' ? 
+          <Request ticketList={ticketList} onUpdateStatus={handleUpdateTicketStatus} onOpenTicket={(type) => { setNewTicket({...initialTicket, ticket_type: type}); setIsModalTicket(true); }} /> : 
+          <WICenterLibrary wiList={wiList} role={role} />;
+
       default: 
-        return <Dashboard wiList={wiList} ticketList={ticketList} revisiList={revisiList} />;
+        return isOperator ? <WICenterLibrary wiList={wiList} role={role} /> : <Dashboard wiList={wiList} ticketList={ticketList} revisiList={revisiList} />;
     }
   };
 
+  if (role === "guest") {
+    return (
+      <div style={uiStyles.loginOverlay}>
+        <div style={uiStyles.loginCard}>
+          <div style={{marginBottom: '20px', background: '#DCFCE7', width: '60px', height: '60px', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto'}}>
+            <ShieldCheck size={32} color="#10B981" />
+          </div>
+          <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#1E293B'}}>WI CENTER HUB</h2>
+          <p style={{color: '#64748B', fontSize: '14px', marginBottom: '30px'}}>Pilih akses masuk untuk melanjutkan</p>
+          
+          <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
+            <button onClick={() => {setRole('admin'); setMenu('dashboard');}} style={uiStyles.loginBtnAdmin}>
+              <ShieldCheck size={20} />
+              <div style={{textAlign: 'left'}}>
+                <div style={{fontWeight: 'bold'}}>Admin / Engineering</div>
+                <div style={{fontSize: '11px', opacity: 0.8}}>Full akses & Manajemen Data</div>
+              </div>
+            </button>
+            
+            <button onClick={() => {setRole('operator'); setMenu('library');}} style={uiStyles.loginBtnUser}>
+              <HardHat size={20} />
+              <div style={{textAlign: 'left'}}>
+                <div style={{fontWeight: 'bold'}}>Operator / Produksi</div>
+                <div style={{fontSize: '11px', opacity: 0.8}}>Scan QR & Search WI Only</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', background: '#F8FAFC', minHeight: '100vh', width: '100%', overflowX: 'hidden' }}>
+      
       <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} style={uiStyles.mobileBtn}>
         {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
@@ -149,15 +200,22 @@ function App() {
 
       {isSidebarOpen && (
         <div style={{ position: 'fixed', zIndex: 3000 }}>
-          <Sidebar menu={menu} setMenu={(m) => { setMenu(m); if(window.innerWidth < 768) setIsSidebarOpen(false); }} />
+          <Sidebar role={role} menu={menu} setMenu={(m) => { setMenu(m); if(window.innerWidth < 768) setIsSidebarOpen(false); }} />
         </div>
       )}
       
       <main style={{ flex: 1, padding: window.innerWidth < 768 ? '15px' : '30px', marginLeft: isSidebarOpen && window.innerWidth > 768 ? '260px' : '0', transition: '0.3s', width: '100%', boxSizing: 'border-box' }}>
+        
+        <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '10px'}}>
+           <button onClick={() => setRole('guest')} style={uiStyles.btnLogout}>
+             <LogOut size={14} /> Keluar ({role.toUpperCase()})
+           </button>
+        </div>
+
         {renderContent()}
       </main>
 
-      {/* --- MODAL MASTER WI --- */}
+      {/* --- MODAL INPUT WI --- */}
       {isModalInputWI && (
         <div style={modalStyles.overlay}>
           <div style={modalStyles.content}>
@@ -170,6 +228,7 @@ function App() {
               <input type="date" style={modalStyles.input} value={newWI.date_created} onChange={e=>setNewWI({...newWI, date_created: e.target.value})}/>
               <input style={modalStyles.input} placeholder="Part Number" required value={newWI.part_number} onChange={e=>setNewWI({...newWI, part_number: e.target.value})}/>
               <input style={modalStyles.input} placeholder="Model" value={newWI.model} onChange={e=>setNewWI({...newWI, model: e.target.value})}/>
+              <input style={modalStyles.input} placeholder="Link File WI (Supabase URL)" value={newWI.file_url} onChange={e=>setNewWI({...newWI, file_url: e.target.value})}/>
               <button type="submit" style={modalStyles.btnSaveWI}>Simpan Master WI</button>
             </form>
           </div>
@@ -271,6 +330,11 @@ function App() {
 }
 
 const uiStyles = {
+  loginOverlay: { height: '100vh', width: '100vw', background: '#F1F5F9', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' },
+  loginCard: { background: 'white', padding: '40px', borderRadius: '30px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', textAlign: 'center', width: '100%', maxWidth: '400px' },
+  loginBtnAdmin: { width: '100%', padding: '16px', borderRadius: '15px', border: 'none', background: '#1E293B', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '15px', transition: '0.2s' },
+  loginBtnUser: { width: '100%', padding: '16px', borderRadius: '15px', border: '2px solid #E2E8F0', background: 'white', color: '#1E293B', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '15px', transition: '0.2s' },
+  btnLogout: { background: 'white', border: '1px solid #E2E8F0', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' },
   mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', boxShadow: '0 4px 20px rgba(16, 185, 129, 0.4)', display: window.innerWidth < 768 ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center' },
   formGroup: { display: 'flex', flexDirection: 'column', gap: '5px' },
   labelStyle: { fontSize: '12px', fontWeight: 'bold', color: '#64748B', marginLeft: '2px' }

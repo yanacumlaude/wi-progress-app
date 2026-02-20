@@ -1,127 +1,183 @@
-import React from "react";
-import { LayoutDashboard, Edit3, Shield, Search, FileWarning, MessageSquare } from "lucide-react";
+import React from 'react';
+import { 
+  LayoutDashboard, 
+  FileCheck, 
+  ClipboardList, 
+  Search, 
+  AlertCircle, 
+  History,
+  LogOut,
+  User,
+  BookOpen
+} from 'lucide-react';
 
-const Sidebar = ({ menu, setMenu }) => {
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'revisi', label: 'Revisi WI', icon: Edit3 },
-    { id: 'logo', label: 'Logo Progress', icon: Search },
-    { id: 'findings', label: 'Findings', icon: FileWarning },
-    { id: 'requests', label: 'Requests', icon: MessageSquare },
-  ];
+export default function Sidebar({ menu, setMenu, role }) {
+  
+  // Fungsi Helper untuk Styling Menu Aktif
+  const activeStyle = (name) => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px 20px',
+    cursor: 'pointer',
+    borderRadius: '12px',
+    transition: '0.3s',
+    background: menu === name ? '#10B981' : 'transparent',
+    color: menu === name ? 'white' : '#64748B',
+    border: 'none',
+    width: '100%',
+    textAlign: 'left',
+    fontWeight: menu === name ? '700' : '500',
+    marginBottom: '5px'
+  });
 
   return (
-    <div style={sideStyles.sidebar}>
-      {/* Header Logo */}
-      <div style={sideStyles.logoSection}>
-        <div style={sideStyles.logoIconBox}>
-          <Shield size={22} color="#4318FF" fill="#4318FF" />
-        </div>
-        <h2 style={sideStyles.logoText}>WI MANAGER</h2>
+    <div style={styles.sidebar}>
+      {/* HEADER LOGO */}
+      <div style={styles.logoSection}>
+        <div style={styles.logoIcon}>WI</div>
+        <h2 style={styles.logoText}>CENTER HUB</h2>
       </div>
 
-      <div style={sideStyles.divider} />
+      {/* USER INFO CARD */}
+      <div style={styles.userCard}>
+        <div style={styles.avatar}>
+          <User size={16} color="#10B981" />
+        </div>
+        <div>
+          <div style={{fontSize: '11px', fontWeight: 'bold', color: '#1E293B', textTransform: 'uppercase'}}>
+            {role === 'admin' ? 'Engineering' : 'Operator'}
+          </div>
+          <div style={{fontSize: '10px', color: '#10B981', fontWeight: '600'}}>● Online</div>
+        </div>
+      </div>
 
-      {/* Menu List */}
-      <div style={sideStyles.menuList}>
-        {menuItems.map((item) => {
-          const isActive = menu === item.id;
-          return (
-            <div 
-              key={item.id}
-              onClick={() => setMenu(item.id)}
-              style={{
-                ...sideStyles.menuItem,
-                backgroundColor: isActive ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-              }}
-            >
-              {/* Indikator Garis Biru saat Aktif */}
-              {isActive && <div style={sideStyles.activeLine} />}
-              
-              <item.icon 
-                size={20} 
-                style={{ 
-                  color: isActive ? '#FFFFFF' : '#A3AED0',
-                  marginRight: '12px'
-                }} 
-              />
-              <span style={{
-                ...sideStyles.menuLabel,
-                color: isActive ? '#FFFFFF' : '#A3AED0',
-                fontWeight: isActive ? '700' : '500'
-              }}>
-                {item.label}
-              </span>
-            </div>
-          );
-        })}
+      <nav style={{ flex: 1, padding: '0 15px', overflowY: 'auto' }}>
+        <p style={styles.menuLabel}>UTAMA</p>
+        
+        <button onClick={() => setMenu('dashboard')} style={activeStyle('dashboard')}>
+          <LayoutDashboard size={20} /> Dashboard
+        </button>
+
+        {/* MENU LIBRARY (Bisa diakses Admin & Operator) */}
+        <button onClick={() => setMenu('library')} style={activeStyle('library')}>
+          <BookOpen size={20} /> WI Library
+        </button>
+
+        {/* --- MENU KHUSUS ADMIN SAJA --- */}
+        {role === 'admin' && (
+          <>
+            <p style={styles.menuLabel}>MANAGEMENT</p>
+            <button onClick={() => setMenu('logo')} style={activeStyle('logo')}>
+              <FileCheck size={20} /> Master WI
+            </button>
+            <button onClick={() => setMenu('requests')} style={activeStyle('requests')}>
+              <ClipboardList size={20} /> User Requests
+            </button>
+            <button onClick={() => setMenu('findings')} style={activeStyle('findings')}>
+              <AlertCircle size={20} /> Findings
+            </button>
+          </>
+        )}
+
+        {/* --- MENU LAPANGAN --- */}
+        <p style={styles.menuLabel}>LAPANGAN</p>
+        <button onClick={() => setMenu('revisi')} style={activeStyle('revisi')}>
+          <History size={20} /> Revisi & Distribusi
+        </button>
+      </nav>
+
+      {/* FOOTER LOGOUT */}
+      <div style={{ padding: '20px', borderTop: '1px solid #F1F5F9' }}>
+        <button 
+          onClick={() => window.location.reload()} 
+          style={styles.btnLogout}
+        >
+          <LogOut size={18} /> Logout
+        </button>
       </div>
     </div>
   );
-};
+}
 
-const sideStyles = {
-  sidebar: { 
-    height: '100vh', 
-    width: '260px', 
-    backgroundColor: '#111C44', // BIRU NAVY GELAP (PASTI KELIHATAN)
-    position: 'fixed', 
-    top: 0, 
-    left: 0, 
-    padding: '30px 0', 
-    display: 'flex', 
+const styles = {
+  sidebar: {
+    width: '260px',
+    height: '100vh',
+    background: 'white',
+    borderRight: '1px solid #F1F5F9',
+    display: 'flex',
     flexDirection: 'column',
-    boxShadow: '4px 0px 20px rgba(0, 0, 0, 0.1)',
-    zIndex: 1000
+    position: 'fixed',
+    left: 0,
+    top: 0
   },
-  logoSection: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    padding: '0 30px', 
-    gap: '12px',
-    marginBottom: '20px'
+  logoSection: {
+    padding: '30px 25px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px'
   },
-  logoIconBox: {
+  logoIcon: {
+    background: '#10B981',
+    color: 'white',
     width: '35px',
     height: '35px',
-    backgroundColor: 'white',
     borderRadius: '10px',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    fontWeight: '900',
+    fontSize: '14px'
   },
-  logoText: { 
-    color: 'white', 
-    fontSize: '16px', 
-    fontWeight: '800', 
+  logoText: {
+    fontSize: '18px',
+    fontWeight: '800',
+    color: '#1E293B',
     margin: 0,
-    letterSpacing: '0.5px'
+    letterSpacing: '-0.5px'
   },
-  divider: {
-    height: '1px',
-    width: '80%',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    margin: '10px auto 25px auto'
+  userCard: {
+    margin: '0 20px 25px 20px',
+    padding: '12px',
+    background: '#F8FAFC',
+    borderRadius: '15px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    border: '1px solid #F1F5F9'
   },
-  menuList: { display: 'flex', flexDirection: 'column', gap: '4px' },
-  menuItem: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    padding: '16px 30px', 
-    cursor: 'pointer', 
-    position: 'relative',
-    transition: 'all 0.2s ease'
+  avatar: {
+    width: '32px',
+    height: '32px',
+    background: 'white',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
   },
-  menuLabel: { fontSize: '14px' },
-  activeLine: {
-    position: 'absolute',
-    right: 0,
-    top: '20%',
-    height: '60%',
-    width: '4px',
-    backgroundColor: '#4318FF',
-    borderRadius: '4px 0 0 4px'
+  menuLabel: {
+    fontSize: '11px',
+    fontWeight: '800',
+    color: '#CBD5E1',
+    paddingLeft: '20px',
+    margin: '15px 0 10px 0',
+    letterSpacing: '1px',
+    textTransform: 'uppercase'
+  },
+  btnLogout: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px 20px',
+    width: '100%',
+    border: 'none',
+    background: '#FFF1F2',
+    color: '#E11D48',
+    borderRadius: '12px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    transition: '0.3s'
   }
 };
-
-export default Sidebar;
