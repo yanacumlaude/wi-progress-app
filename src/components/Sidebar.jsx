@@ -3,7 +3,6 @@ import {
   LayoutDashboard, 
   FileCheck, 
   ClipboardList, 
-  Search, 
   AlertCircle, 
   History,
   LogOut,
@@ -59,7 +58,7 @@ export default function Sidebar({ menu, setMenu, role }) {
           <LayoutDashboard size={20} /> Dashboard
         </button>
 
-        {/* MENU LIBRARY (Bisa diakses Admin & Operator) */}
+        {/* MENU LIBRARY (Admin & Operator Bisa Lihat) */}
         <button onClick={() => setMenu('library')} style={activeStyle('library')}>
           <BookOpen size={20} /> WI Library
         </button>
@@ -67,24 +66,27 @@ export default function Sidebar({ menu, setMenu, role }) {
         {/* --- MENU KHUSUS ADMIN SAJA --- */}
         {role === 'admin' && (
           <>
-            <p style={styles.menuLabel}>MANAGEMENT</p>
+            <p style={styles.menuLabel}>ADMIN MANAGEMENT</p>
+            
+            {/* Menu Master WI (Logo Progress) */}
             <button onClick={() => setMenu('logo')} style={activeStyle('logo')}>
               <FileCheck size={20} /> Master WI
             </button>
+
+            {/* Menu Revisi & Distribusi dipindah ke sini agar aman dari Operator */}
+            <button onClick={() => setMenu('revisi')} style={activeStyle('revisi')}>
+              <History size={20} /> Revisi & Distribusi
+            </button>
+            
             <button onClick={() => setMenu('requests')} style={activeStyle('requests')}>
               <ClipboardList size={20} /> User Requests
             </button>
+            
             <button onClick={() => setMenu('findings')} style={activeStyle('findings')}>
               <AlertCircle size={20} /> Findings
             </button>
           </>
         )}
-
-        {/* --- MENU LAPANGAN --- */}
-        <p style={styles.menuLabel}>LAPANGAN</p>
-        <button onClick={() => setMenu('revisi')} style={activeStyle('revisi')}>
-          <History size={20} /> Revisi & Distribusi
-        </button>
       </nav>
 
       {/* FOOTER LOGOUT */}
@@ -108,9 +110,7 @@ const styles = {
     borderRight: '1px solid #F1F5F9',
     display: 'flex',
     flexDirection: 'column',
-    position: 'fixed',
-    left: 0,
-    top: 0
+    position: 'relative', // Ubah ke relative karena pembungkus di App.jsx sudah fixed
   },
   logoSection: {
     padding: '30px 25px',
