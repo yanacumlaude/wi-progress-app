@@ -1,326 +1,157 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import Sidebar from "./components/Sidebar";
-import { Menu, X, ShieldCheck, HardHat, LogOut } from "lucide-react";
-
 import Dashboard from "./components/Dashboard";
-import LogoProgress from "./components/LogoProgress";
-import Request from "./components/Request";
-import Findings from "./components/Findings";
-import Revisi from "./components/Revisi";
-import WICenterLibrary from "./components/WICenterLibrary"; 
+import WICenterLibrary from "./components/WICenterLibrary";
+import UserRequests from "./components/UserRequests";
+import { Plus, Database, LayoutDashboard, Library, MessageSquare } from "lucide-react";
 
 function App() {
-  const [role, setRole] = useState("guest"); // guest, admin, operator
-  const [menu, setMenu] = useState("dashboard");
-  const [wiList, setWiList] = useState([]);
-  const [revisiList, setRevisiList] = useState([]);
-  const [ticketList, setTicketList] = useState([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  
-  // --- STATE MODALS ---
-  const [isModalInputWI, setIsModalInputWI] = useState(false);
-  const [isModalTicket, setIsModalTicket] = useState(false);
-  const [isModalRevisi, setIsModalRevisi] = useState(false); 
-  const [editMode, setEditMode] = useState(false);
-  const [currentRevisiId, setCurrentRevisiId] = useState(null);
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [wiStatusList, setWiStatusList] = useState([]); // Untuk Dashboard Progres
+  const [wiMasterList, setWiMasterList] = useState([]); // Untuk Database Pusat WI
+  const [loading, setLoading] = useState(true);
 
-  // --- DATA STATES ---
-  const initialTicket = {
-    ticket_type: "Finding", requester_name: "", part_number: "", area: "", 
-    description: "", priority: "Normal", status: "Open", process_name: "",
-    mold_number: "", model: "", wi_process: "Finish Good", location: "Production",
-    customer: ""
-  };
-
-  const initialRevisi = {
-    proses_name: "", customer: "", part_name: "", part_number: "",
-    mold_number: "", model: "", wi_type: "Finish Good", location: "Production",
-    tgl_revisi: "", departemen: "", keterangan_revisi: "", qty_print: 0,
-    pic_penerima: "", tgl_distribusi: "", tgl_penarikan: "", status: "In Progress"
-  };
-
+  // State Form Input Master WI
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [newWI, setNewWI] = useState({
-    customer: "", date_created: "", part_number: "", mold_number: "",
-    model: "", is_logo_updated: false, is_6_sisi: false,
-    condition: "Bagus", remarks: "", status_oc: "O", location: "",
-    file_url: "" 
+    customer: "",
+    part_number: "",
+    mold_number: "",
+    model: "",
+    process_name: "",
+    file_url: ""
   });
 
-  const [newTicket, setNewTicket] = useState(initialTicket);
-  const [newRevisi, setNewRevisi] = useState(initialRevisi);
-
-  const fetchData = async () => {
-    try {
-      const { data: wi } = await supabase.from('wi_data').select('*').order('id', { ascending: false });
-      const { data: rev } = await supabase.from('revisi_wi').select('*').order('id', { ascending: false });
-      const { data: tick } = await supabase.from('wi_tickets').select('*').order('id', { ascending: false });
-      
-      setWiList(wi || []);
-      setRevisiList(rev || []);
-      setTicketList(tick || []);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-    }
-  };
-
-  useEffect(() => { 
+  useEffect(() => {
     fetchData();
-    if (window.innerWidth < 768) setIsSidebarOpen(false);
   }, []);
 
-  // --- HANDLERS ---
-  const handleSaveWI = async (e) => {
-    e.preventDefault();
-    const { error } = await supabase.from('wi_data').insert([newWI]);
-    if (error) alert(error.message);
-    else { alert("Data WI Berhasil Disimpan!"); setIsModalInputWI(false); fetchData(); }
-  };
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // 1. Ambil Data Master (Untuk Library)
+      const { data: masterData } = await supabase
+        .from("wi_master")
+        .select("*")
+        .order("created_at", { ascending: false });
+      
+      setWiMasterList(masterData || []);
 
-  const handleSaveTicket = async (e) => {
-    e.preventDefault();
-    const { error } = await supabase.from('wi_tickets').insert([newTicket]);
-    if (error) alert(error.message);
-    else { alert("Tiket Berhasil Terkirim!"); setIsModalTicket(false); fetchData(); }
-  };
-
-  const handleUpdateTicketStatus = async (id, targetStatus) => {
-    const { error } = await supabase
-      .from('wi_tickets')
-      .update({ status: targetStatus })
-      .eq('id', id);
-
-    if (error) alert("Gagal update status: " + error.message);
-    else fetchData();
-  };
-
-  const handleSaveRevisi = async (e) => {
-    e.preventDefault();
-    if (editMode) {
-      const { error } = await supabase.from('revisi_wi').update(newRevisi).eq('id', currentRevisiId);
-      if (error) alert(error.message);
-      else { alert("Data Revisi Diperbarui!"); setIsModalRevisi(false); fetchData(); }
-    } else {
-      const { error } = await supabase.from('revisi_wi').insert([newRevisi]);
-      if (error) alert(error.message);
-      else { alert("Data Distribusi Berhasil Dicatat!"); setIsModalRevisi(false); fetchData(); }
+      // 2. Ambil Data Progres (Untuk Dashboard)
+      // Kita asumsikan wi_status punya foreign key ke wi_master
+      const { data: statusData } = await supabase
+        .from("wi_status")
+        .select(`
+          *,
+          wi_master (part_number, model, customer, process_name, mold_number)
+        `);
+      
+      setWiStatusList(statusData || []);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleUpdateLogoStatus = async (id, currentStatus) => {
-    const nextStatus = currentStatus === 'O' ? 'C' : 'O';
-    const { error } = await supabase.from('wi_data').update({ status_oc: nextStatus }).eq('id', id);
-    if (error) alert(error.message);
-    else fetchData();
-  };
-
-  const onEditRevisi = (data) => {
-    setNewRevisi(data);
-    setCurrentRevisiId(data.id);
-    setEditMode(true);
-    setIsModalRevisi(true);
-  };
-
-  const renderContent = () => {
-    // Jika role operator klik menu selain revisi, arahkan ke Library agar tidak terjebak di dashboard kosong
-    const isOperator = role === 'operator';
-
-    switch (menu) {
-      case "dashboard": 
-        return <Dashboard wiList={wiList} ticketList={ticketList} revisiList={revisiList} role={role} />;
+  const handleSaveMaster = async (e) => {
+    e.preventDefault();
+    try {
+      const { error } = await supabase.from("wi_master").insert([newWI]);
+      if (error) throw error;
       
-      case "library": 
-        return <WICenterLibrary wiList={wiList} role={role} />;
-
-      case "logo": 
-        return role === 'admin' ? 
-          <LogoProgress wiList={wiList} onOpenModal={() => setIsModalInputWI(true)} onUpdateStatus={handleUpdateLogoStatus} /> : 
-          <WICenterLibrary wiList={wiList} role={role} />;
-
-      case "revisi": 
-        return <Revisi revisiList={revisiList} onOpenModal={() => { setEditMode(false); setNewRevisi(initialRevisi); setIsModalRevisi(true); }} onEditRevisi={onEditRevisi} />;
-      
-      case "findings": 
-        return role === 'admin' ? 
-          <Findings ticketList={ticketList} onUpdateStatus={handleUpdateTicketStatus} onOpenTicket={(type) => { setNewTicket({...initialTicket, ticket_type: type}); setIsModalTicket(true); }} /> : 
-          <WICenterLibrary wiList={wiList} role={role} />;
-
-      case "requests": 
-        return role === 'admin' ? 
-          <Request ticketList={ticketList} onUpdateStatus={handleUpdateTicketStatus} onOpenTicket={(type) => { setNewTicket({...initialTicket, ticket_type: type}); setIsModalTicket(true); }} /> : 
-          <WICenterLibrary wiList={wiList} role={role} />;
-
-      default: 
-        return isOperator ? <WICenterLibrary wiList={wiList} role={role} /> : <Dashboard wiList={wiList} ticketList={ticketList} revisiList={revisiList} />;
+      alert("Data Master Berhasil Disimpan!");
+      setNewWI({ customer: "", part_number: "", mold_number: "", model: "", process_name: "", file_url: "" });
+      setIsModalOpen(false);
+      fetchData();
+    } catch (error) {
+      alert("Gagal menyimpan: " + error.message);
     }
   };
-
-  if (role === "guest") {
-    return (
-      <div style={uiStyles.loginOverlay}>
-        <div style={uiStyles.loginCard}>
-          <div style={{marginBottom: '20px', background: '#DCFCE7', width: '60px', height: '60px', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto'}}>
-            <ShieldCheck size={32} color="#10B981" />
-          </div>
-          <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#1E293B'}}>WI CENTER HUB</h2>
-          <p style={{color: '#64748B', fontSize: '14px', marginBottom: '30px'}}>Pilih akses masuk untuk melanjutkan</p>
-          
-          <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
-            <button onClick={() => {setRole('admin'); setMenu('dashboard');}} style={uiStyles.loginBtnAdmin}>
-              <ShieldCheck size={20} />
-              <div style={{textAlign: 'left'}}>
-                <div style={{fontWeight: 'bold'}}>Admin / Engineering</div>
-                <div style={{fontSize: '11px', opacity: 0.8}}>Full akses & Manajemen Data</div>
-              </div>
-            </button>
-            
-            <button onClick={() => {setRole('operator'); setMenu('library');}} style={uiStyles.loginBtnUser}>
-              <HardHat size={20} />
-              <div style={{textAlign: 'left'}}>
-                <div style={{fontWeight: 'bold'}}>Operator / Produksi</div>
-                <div style={{fontSize: '11px', opacity: 0.8}}>Scan QR & Search WI Only</div>
-              </div>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div style={{ display: 'flex', background: '#F8FAFC', minHeight: '100vh', width: '100%', overflowX: 'hidden' }}>
+    <div style={styles.appContainer}>
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       
-      <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} style={uiStyles.mobileBtn}>
-        {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
+      <main style={styles.mainContent}>
+        {/* HEADER DYNAMIC */}
+        <header style={styles.topHeader}>
+          <div>
+            <h2 style={styles.welcomeText}>Halo, Sepuh! 👋</h2>
+            <p style={styles.dateText}>{new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+          </div>
+          
+          <button onClick={() => setIsModalOpen(true)} style={styles.btnAdd}>
+            <Plus size={20} /> Tambah Master WI
+          </button>
+        </header>
 
-      {isSidebarOpen && window.innerWidth < 768 && (
-        <div onClick={() => setIsSidebarOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 2500, backdropFilter: 'blur(2px)' }} />
-      )}
+        {/* CONTENT BERDASARKAN TAB */}
+        <div style={styles.tabContent}>
+          {activeTab === "dashboard" && (
+            <Dashboard data={wiStatusList} refreshData={fetchData} />
+          )}
+          
+          {activeTab === "library" && (
+            <WICenterLibrary wiList={wiMasterList} />
+          )}
 
-      {isSidebarOpen && (
-        <div style={{ position: 'fixed', zIndex: 3000 }}>
-          <Sidebar role={role} menu={menu} setMenu={(m) => { setMenu(m); if(window.innerWidth < 768) setIsSidebarOpen(false); }} />
+          {activeTab === "requests" && (
+            <UserRequests />
+          )}
         </div>
-      )}
-      
-      <main style={{ flex: 1, padding: window.innerWidth < 768 ? '15px' : '30px', marginLeft: isSidebarOpen && window.innerWidth > 768 ? '260px' : '0', transition: '0.3s', width: '100%', boxSizing: 'border-box' }}>
-        
-        <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '10px'}}>
-           <button onClick={() => setRole('guest')} style={uiStyles.btnLogout}>
-             <LogOut size={14} /> Keluar ({role.toUpperCase()})
-           </button>
-        </div>
-
-        {renderContent()}
       </main>
 
-      {/* --- MODAL INPUT WI --- */}
-      {isModalInputWI && (
-        <div style={modalStyles.overlay}>
-          <div style={modalStyles.content}>
-            <div style={modalStyles.header}>
-              <h3 style={{color: '#10B981', fontSize: '16px'}}>Input Master WI Baru</h3>
-              <button onClick={() => setIsModalInputWI(false)} style={modalStyles.btnClose}>×</button>
+      {/* MODAL INPUT MASTER WI */}
+      {isModalOpen && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modal}>
+            <div style={styles.modalHeader}>
+              <h3>Registrasi Master WI Baru</h3>
+              <button onClick={() => setIsModalOpen(false)} style={styles.btnClose}><Plus style={{transform: 'rotate(45deg)'}} /></button>
             </div>
-            <form onSubmit={handleSaveWI} style={modalStyles.formGrid}>
-              <input style={modalStyles.input} placeholder="Customer" value={newWI.customer} onChange={e=>setNewWI({...newWI, customer: e.target.value})}/>
-              <input type="date" style={modalStyles.input} value={newWI.date_created} onChange={e=>setNewWI({...newWI, date_created: e.target.value})}/>
-              <input style={modalStyles.input} placeholder="Part Number" required value={newWI.part_number} onChange={e=>setNewWI({...newWI, part_number: e.target.value})}/>
-              <input style={modalStyles.input} placeholder="Model" value={newWI.model} onChange={e=>setNewWI({...newWI, model: e.target.value})}/>
-              <input style={modalStyles.input} placeholder="Link File WI (Supabase URL)" value={newWI.file_url} onChange={e=>setNewWI({...newWI, file_url: e.target.value})}/>
-              <button type="submit" style={modalStyles.btnSaveWI}>Simpan Master WI</button>
-            </form>
-          </div>
-        </div>
-      )}
+            
+            <form onSubmit={handleSaveMaster} style={styles.form}>
+              <div style={styles.inputGroup}>
+                <label>Customer</label>
+                <input type="text" placeholder="Contoh: PT. ABC" required
+                  value={newWI.customer} onChange={(e) => setNewWI({...newWI, customer: e.target.value})} />
+              </div>
 
-      {/* --- MODAL REVISI --- */}
-      {isModalRevisi && (
-        <div style={modalStyles.overlay}>
-          <div style={{...modalStyles.content, maxWidth: '750px'}}>
-            <div style={modalStyles.header}>
-              <h3 style={{color: '#10B981', margin: 0, fontSize: '16px'}}>{editMode ? 'Update Progres Revisi' : 'Input Distribusi Baru'}</h3>
-              <button onClick={() => setIsModalRevisi(false)} style={modalStyles.btnClose}>×</button>
-            </div>
-            <form onSubmit={handleSaveRevisi} style={{display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '10px'}}>
-              <div style={modalStyles.mobileGridTwo}>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Nama Proses</label>
-                  <input style={modalStyles.input} placeholder="Contoh: Line 1" value={newRevisi.proses_name || ''} onChange={e=>setNewRevisi({...newRevisi, proses_name: e.target.value})} required/></div>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Departemen</label>
-                  <select style={modalStyles.input} value={newRevisi.departemen || ''} onChange={e=>setNewRevisi({...newRevisi, departemen: e.target.value})}>
-                    <option value="">Pilih Dept</option>
-                    <option value="Production">Production</option>
-                    <option value="Quality">Quality</option>
-                    <option value="Engineering">Engineering</option>
-                  </select></div>
+              <div style={styles.gridInput}>
+                <div style={styles.inputGroup}>
+                  <label>Part Number</label>
+                  <input type="text" placeholder="PN-12345" required
+                    value={newWI.part_number} onChange={(e) => setNewWI({...newWI, part_number: e.target.value})} />
+                </div>
+                <div style={styles.inputGroup}>
+                  <label>Mold Number</label>
+                  <input type="text" placeholder="MOLD-001" required
+                    value={newWI.mold_number} onChange={(e) => setNewWI({...newWI, mold_number: e.target.value})} />
+                </div>
               </div>
-              <div style={modalStyles.mobileGrid}>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Part Number</label>
-                  <input style={modalStyles.input} value={newRevisi.part_number || ''} onChange={e=>setNewRevisi({...newRevisi, part_number: e.target.value})} required/></div>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Model</label>
-                  <input style={modalStyles.input} value={newRevisi.model || ''} onChange={e=>setNewRevisi({...newRevisi, model: e.target.value})}/></div>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Customer</label>
-                  <input style={modalStyles.input} value={newRevisi.customer || ''} onChange={e=>setNewRevisi({...newRevisi, customer: e.target.value})}/></div>
-              </div>
-              <div style={modalStyles.mobileGrid}>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Tgl Revisi</label>
-                  <input type="date" style={modalStyles.input} value={newRevisi.tgl_revisi || ''} onChange={e=>setNewRevisi({...newRevisi, tgl_revisi: e.target.value})}/></div>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Tgl Distribusi</label>
-                  <input type="date" style={modalStyles.input} value={newRevisi.tgl_distribusi || ''} onChange={e=>setNewRevisi({...newRevisi, tgl_distribusi: e.target.value})}/></div>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Tgl Penarikan</label>
-                  <input type="date" style={modalStyles.input} value={newRevisi.tgl_penarikan || ''} onChange={e=>setNewRevisi({...newRevisi, tgl_penarikan: e.target.value})}/></div>
-              </div>
-              <div style={modalStyles.mobileGridTwo}>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>PIC Penerima</label>
-                  <input style={modalStyles.input} value={newRevisi.pic_penerima || ''} onChange={e=>setNewRevisi({...newRevisi, pic_penerima: e.target.value})}/></div>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Status</label>
-                  <select style={modalStyles.input} value={newRevisi.status || 'In Progress'} onChange={e=>setNewRevisi({...newRevisi, status: e.target.value})}>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Distributed">Distributed</option>
-                    <option value="Completed">Completed</option>
-                  </select></div>
-              </div>
-              <div style={uiStyles.formGroup}>
-                <label style={uiStyles.labelStyle}>Keterangan Revisi</label>
-                <textarea style={{...modalStyles.input, height: '70px', resize: 'none'}} value={newRevisi.keterangan_revisi || ''} onChange={e=>setNewRevisi({...newRevisi, keterangan_revisi: e.target.value})} placeholder="Detail revisi..."></textarea>
-              </div>
-              <button type="submit" style={modalStyles.btnSaveTicket}>{editMode ? 'Update Data Lapangan' : 'Simpan Distribusi'}</button>
-            </form>
-          </div>
-        </div>
-      )}
 
-      {/* --- MODAL TICKET --- */}
-      {isModalTicket && (
-        <div style={modalStyles.overlay}>
-          <div style={{...modalStyles.content, width: '90%', maxWidth: '650px'}}>
-            <div style={modalStyles.header}>
-              <h3 style={{color: '#10B981', margin: 0, fontSize: '16px'}}>Buat Tiket {newTicket.ticket_type}</h3>
-              <button onClick={() => setIsModalTicket(false)} style={modalStyles.btnClose}>×</button>
-            </div>
-            <form onSubmit={handleSaveTicket} style={{display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '10px'}}>
-              <div style={modalStyles.mobileGridTwo}>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Nama Pelapor</label>
-                  <input style={modalStyles.input} placeholder="Nama Anda" required value={newTicket.requester_name} onChange={e => setNewTicket({...newTicket, requester_name: e.target.value})} /></div>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Area Temuan</label>
-                  <input style={modalStyles.input} placeholder="Line 1 / Warehouse" value={newTicket.area} onChange={e => setNewTicket({...newTicket, area: e.target.value})} /></div>
+              <div style={styles.gridInput}>
+                <div style={styles.inputGroup}>
+                  <label>Model</label>
+                  <input type="text" placeholder="Model Name" required
+                    value={newWI.model} onChange={(e) => setNewWI({...newWI, model: e.target.value})} />
+                </div>
+                <div style={styles.inputGroup}>
+                  <label>Nama Proses</label>
+                  <input type="text" placeholder="Injeksi / Assy / Paint" required
+                    value={newWI.process_name} onChange={(e) => setNewWI({...newWI, process_name: e.target.value})} />
+                </div>
               </div>
-              <div style={modalStyles.mobileGridTwo}>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Part Number</label>
-                  <input style={modalStyles.input} placeholder="No. Part" required value={newTicket.part_number} onChange={e => setNewTicket({...newTicket, part_number: e.target.value})} /></div>
-                <div style={uiStyles.formGroup}><label style={uiStyles.labelStyle}>Prioritas</label>
-                  <select style={modalStyles.input} value={newTicket.priority} onChange={e => setNewTicket({...newTicket, priority: e.target.value})}>
-                    <option value="Normal">Normal</option>
-                    <option value="Urgent">Urgent</option>
-                    <option value="Critical">Critical</option>
-                  </select></div>
+
+              <div style={styles.inputGroup}>
+                <label>URL File WI (Google Drive/PDF)</label>
+                <input type="url" placeholder="https://drive.google.com/..." required
+                  value={newWI.file_url} onChange={(e) => setNewWI({...newWI, file_url: e.target.value})} />
               </div>
-              <div style={uiStyles.formGroup}>
-                <label style={uiStyles.labelStyle}>Deskripsi Detail</label>
-                <textarea style={{...modalStyles.input, height: '80px', resize: 'none'}} placeholder="Penjelasan temuan..." required value={newTicket.description} onChange={e => setNewTicket({...newTicket, description: e.target.value})}></textarea>
-              </div>
-              <button type="submit" style={modalStyles.btnSaveTicket}>Kirim Tiket Sekarang</button>
+
+              <button type="submit" style={styles.btnSubmit}>Simpan ke Database</button>
             </form>
           </div>
         </div>
@@ -329,28 +160,24 @@ function App() {
   );
 }
 
-const uiStyles = {
-  loginOverlay: { height: '100vh', width: '100vw', background: '#F1F5F9', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' },
-  loginCard: { background: 'white', padding: '40px', borderRadius: '30px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', textAlign: 'center', width: '100%', maxWidth: '400px' },
-  loginBtnAdmin: { width: '100%', padding: '16px', borderRadius: '15px', border: 'none', background: '#1E293B', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '15px', transition: '0.2s' },
-  loginBtnUser: { width: '100%', padding: '16px', borderRadius: '15px', border: '2px solid #E2E8F0', background: 'white', color: '#1E293B', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '15px', transition: '0.2s' },
-  btnLogout: { background: 'white', border: '1px solid #E2E8F0', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' },
-  mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', boxShadow: '0 4px 20px rgba(16, 185, 129, 0.4)', display: window.innerWidth < 768 ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center' },
-  formGroup: { display: 'flex', flexDirection: 'column', gap: '5px' },
-  labelStyle: { fontSize: '12px', fontWeight: 'bold', color: '#64748B', marginLeft: '2px' }
-};
-
-const modalStyles = {
-  overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, padding: '15px', backdropFilter: 'blur(2px)' },
-  content: { background: 'white', padding: '20px', borderRadius: '20px', width: '100%', maxWidth: '500px', maxHeight: '95vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
-  btnClose: { background: '#F1F5F9', border: 'none', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  formGrid: { display: 'grid', gridTemplateColumns: window.innerWidth < 600 ? '1fr' : '1fr 1fr', gap: '12px' },
-  mobileGrid: { display: 'grid', gridTemplateColumns: window.innerWidth < 600 ? '1fr' : '1fr 1fr 1fr', gap: '12px' },
-  mobileGridTwo: { display: 'grid', gridTemplateColumns: window.innerWidth < 600 ? '1fr' : '1fr 1fr', gap: '12px' },
-  input: { padding: '12px', borderRadius: '10px', border: '1px solid #E2E8F0', outline: 'none', fontSize: '14px', width: '100%', boxSizing: 'border-box' },
-  btnSaveWI: { gridColumn: window.innerWidth < 600 ? 'auto' : 'span 2', background: '#10B981', color: 'white', padding: '14px', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
-  btnSaveTicket: { background: '#10B981', color: 'white', padding: '14px', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }
+const styles = {
+  appContainer: { display: "flex", minHeight: "100vh", backgroundColor: "#F8FAFC" },
+  mainContent: { flex: 1, padding: "30px", overflowY: "auto" },
+  topHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px" },
+  welcomeText: { margin: 0, fontSize: "24px", fontWeight: "bold", color: "#1E293B" },
+  dateText: { margin: "5px 0 0 0", color: "#64748B", fontSize: "14px" },
+  btnAdd: { display: "flex", alignItems: "center", gap: "8px", backgroundColor: "#3B82F6", color: "white", border: "none", padding: "12px 20px", borderRadius: "12px", fontWeight: "600", cursor: "pointer", transition: "0.3s" },
+  tabContent: { marginTop: "20px" },
+  
+  // Modal Styles
+  modalOverlay: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, backdropFilter: "blur(4px)" },
+  modal: { backgroundColor: "white", padding: "30px", borderRadius: "20px", width: "500px", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)" },
+  modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" },
+  btnClose: { background: "none", border: "none", fontSize: "24px", cursor: "pointer", color: "#64748B" },
+  form: { display: "flex", flexDirection: "column", gap: "15px" },
+  gridInput: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" },
+  inputGroup: { display: "flex", flexDirection: "column", gap: "5px" },
+  btnSubmit: { marginTop: "10px", padding: "14px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: "10px", fontWeight: "bold", cursor: "pointer" }
 };
 
 export default App;
