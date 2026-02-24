@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import Sidebar from "./components/Sidebar";
-import { Menu, X, ShieldCheck, HardHat, LogOut, Upload, FileText, CheckCircle } from "lucide-react";
+import { Menu, X, ShieldCheck, HardHat, LogOut, Upload, CheckCircle, FileText, Archive, Save } from "lucide-react";
 
 import Dashboard from "./components/Dashboard";
 import LogoProgress from "./components/LogoProgress";
@@ -18,10 +18,11 @@ function App() {
   const [ticketList, setTicketList] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
-  // State untuk Upload
   const [isUploading, setIsUploading] = useState(false);
-
   const [isModalInputWI, setIsModalInputWI] = useState(false);
+  const [isModalEditWI, setIsModalEditWI] = useState(false);
+  const [editingWI, setEditingWI] = useState(null);
+
   const [isModalTicket, setIsModalTicket] = useState(false);
   const [isModalRevisi, setIsModalRevisi] = useState(false); 
   const [editMode, setEditMode] = useState(false);
@@ -42,10 +43,21 @@ function App() {
   };
 
   const [newWI, setNewWI] = useState({
-    customer: "", date_created: new Date().toISOString().split('T')[0], part_number: "", mold_number: "",
-    model: "", is_logo_updated: false, is_6_sisi: false,
-    condition: "Bagus", remarks: "", status_oc: "O", location: "",
-    file_url: "", process_name: "" 
+    customer: "", 
+    date_created: new Date().toISOString().split('T')[0], 
+    part_number: "", 
+    mold_number: "",
+    model: "", 
+    is_logo_updated: false, 
+    is_6_sisi: false,
+    condition: "Bagus", 
+    remarks: "", 
+    status_oc: "O", 
+    location: "",
+    revision_no: "", 
+    file_url: "", 
+    process_name: "",
+    is_archived: false 
   });
 
   const [newTicket, setNewTicket] = useState(initialTicket);
@@ -53,9 +65,14 @@ function App() {
 
   const fetchData = async () => {
     try {
-      const { data: wi } = await supabase.from('wi_data').select('*').order('id', { ascending: false });
+      const { data: wi } = await supabase
+        .from('wi_data')
+        .select('*')
+        .order('id', { ascending: false }); // Filter is_archived dihapus agar data arsip tetap ter-fetch
+        
       const { data: rev } = await supabase.from('revisi_wi').select('*').order('id', { ascending: false });
       const { data: tick } = await supabase.from('wi_tickets').select('*').order('id', { ascending: false });
+      
       setWiList(wi || []);
       setRevisiList(rev || []);
       setTicketList(tick || []);
@@ -74,12 +91,9 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // --- NEW HANDLER: FILE UPLOAD TO SUPABASE STORAGE ---
-  const handleFileUpload = async (e) => {
+  const handleFileUpload = async (e, isEdit = false) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    // Validasi tipe file
     if (file.type !== "application/pdf") {
       alert("Hanya file PDF yang diizinkan!");
       return;
@@ -91,22 +105,22 @@ function App() {
       const fileName = `${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
       const filePath = `wi_documents/${fileName}`;
 
-      // 1. Upload file ke bucket 'wi-files'
       const { error: uploadError } = await supabase.storage
         .from('wi-files')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      // 2. Ambil Public URL
       const { data: { publicUrl } } = supabase.storage
         .from('wi-files')
         .getPublicUrl(filePath);
 
-      // 3. Masukkan ke state newWI
-      setNewWI({ ...newWI, file_url: publicUrl });
+      if (isEdit) {
+        setEditingWI({ ...editingWI, file_url: publicUrl });
+      } else {
+        setNewWI({ ...newWI, file_url: publicUrl });
+      }
       alert("Upload Berhasil!");
-
     } catch (error) {
       console.error("Upload failed:", error);
       alert("Upload gagal: " + error.message);
@@ -115,7 +129,6 @@ function App() {
     }
   };
 
-  // --- HANDLERS ---
   const handleSaveWI = async (e) => {
     e.preventDefault();
     const { error } = await supabase.from('wi_data').insert([newWI]);
@@ -123,9 +136,57 @@ function App() {
     else { 
       alert("Master WI Disimpan!"); 
       setIsModalInputWI(false); 
-      setNewWI({ ...newWI, file_url: "" }); // Reset URL setelah simpan
+      setNewWI({ 
+        customer: "", date_created: new Date().toISOString().split('T')[0], 
+        part_number: "", mold_number: "", model: "", is_logo_updated: false, 
+        is_6_sisi: false, condition: "Bagus", remarks: "", status_oc: "O", 
+        location: "", revision_no: "", file_url: "", process_name: "", is_archived: false 
+      }); 
       fetchData(); 
     }
+  };
+
+  const handleUpdateWI = async (e) => {
+    e.preventDefault();
+    const { error } = await supabase
+      .from('wi_data')
+      .update({
+        customer: editingWI.customer,
+        model: editingWI.model,
+        part_number: editingWI.part_number,
+        mold_number: editingWI.mold_number,
+        process_name: editingWI.process_name,
+        revision_no: editingWI.revision_no,
+        location: editingWI.location,
+        remarks: editingWI.remarks,
+        file_url: editingWI.file_url,
+        is_archived: editingWI.is_archived 
+      })
+      .eq('id', editingWI.id);
+
+    if (error) alert(error.message);
+    else { 
+      alert(editingWI.is_archived ? "Data Berhasil Diarsipkan!" : "Data WI Berhasil Diperbarui!"); 
+      setIsModalEditWI(false); 
+      fetchData(); 
+    }
+  };
+
+  // Fungsi Hapus Permanen Baru
+  const handleDeleteWI = async (id) => {
+    if (window.confirm("Puh, yakin mau hapus permanen data ini? Tindakan ini tidak bisa dibatalkan!")) {
+      const { error } = await supabase.from('wi_data').delete().eq('id', id);
+      if (error) alert(error.message);
+      else {
+        alert("Data dihapus selamanya!");
+        fetchData();
+      }
+    }
+  };
+
+  const handleUpdateTicketStatus = async (id, targetStatus) => {
+    const { error } = await supabase.from('wi_tickets').update({ status: targetStatus }).eq('id', id);
+    if (!error) fetchData();
   };
 
   const handleSaveTicket = async (e) => {
@@ -133,11 +194,6 @@ function App() {
     const { error } = await supabase.from('wi_tickets').insert([newTicket]);
     if (error) alert(error.message);
     else { alert("Tiket Terkirim!"); setIsModalTicket(false); fetchData(); }
-  };
-
-  const handleUpdateTicketStatus = async (id, targetStatus) => {
-    const { error } = await supabase.from('wi_tickets').update({ status: targetStatus }).eq('id', id);
-    if (!error) fetchData();
   };
 
   const handleSaveRevisi = async (e) => {
@@ -156,7 +212,15 @@ function App() {
       case "dashboard": 
         return <Dashboard wiList={wiList} ticketList={ticketList} revisiList={revisiList} role={role} />;
       case "library": 
-        return <WICenterLibrary wiList={wiList} role={role} />;
+        return (
+          <WICenterLibrary 
+            wiList={wiList} 
+            role={role} 
+            onEdit={(wi) => { setEditingWI(wi); setIsModalEditWI(true); }} 
+            onOpenInputModal={() => setIsModalInputWI(true)} 
+            onDelete={handleDeleteWI}
+          />
+        );
       case "logo":
         return role === 'admin' 
           ? <LogoProgress wiList={wiList} onOpenModal={() => setIsModalInputWI(true)} onUpdateStatus={async (id, status) => {
@@ -227,15 +291,10 @@ function App() {
         transition: '0.3s',
         width: '100%'
       }}>
-        <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '20px'}}>
-           <button onClick={() => setRole('guest')} style={uiStyles.btnLogout}>
-             <LogOut size={14} /> Logout ({role})
-           </button>
-        </div>
         {renderContent()}
       </main>
 
-      {/* MODAL INPUT MASTER WI DENGAN FITUR UPLOAD */}
+      {/* MODAL INPUT MASTER WI */}
       {isModalInputWI && (
         <div style={modalStyles.overlay}>
           <div style={modalStyles.content}>
@@ -249,114 +308,126 @@ function App() {
                 <input style={modalStyles.input} placeholder="Model" value={newWI.model} onChange={e=>setNewWI({...newWI, model: e.target.value})}/>
               </div>
               <input style={modalStyles.input} placeholder="Part Number" required value={newWI.part_number} onChange={e=>setNewWI({...newWI, part_number: e.target.value})}/>
-              <input style={modalStyles.input} placeholder="Mold Number" value={newWI.mold_number} onChange={e=>setNewWI({...newWI, mold_number: e.target.value})}/>
-              <input style={modalStyles.input} placeholder="Nama Proses" value={newWI.process_name} onChange={e=>setNewWI({...newWI, process_name: e.target.value})}/>
               
-              {/* BAGIAN UPLOAD FILE */}
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                <input style={modalStyles.input} placeholder="Mold Number" value={newWI.mold_number} onChange={e=>setNewWI({...newWI, mold_number: e.target.value})}/>
+                <input style={modalStyles.input} placeholder="No. Revisi (Contoh: 01)" value={newWI.revision_no} onChange={e=>setNewWI({...newWI, revision_no: e.target.value})}/>
+              </div>
+
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                <input style={modalStyles.input} placeholder="Nama Proses" value={newWI.process_name} onChange={e=>setNewWI({...newWI, process_name: e.target.value})}/>
+                <input style={modalStyles.input} placeholder="Lokasi" value={newWI.location} onChange={e=>setNewWI({...newWI, location: e.target.value})}/>
+              </div>
+
+              <textarea 
+                style={{...modalStyles.input, height: '60px'}} 
+                placeholder="Remarks" 
+                value={newWI.remarks} 
+                onChange={e=>setNewWI({...newWI, remarks: e.target.value})}
+              />
+              
               <div style={uploadStyles.container}>
                 <label style={uploadStyles.label}>
                   <div style={uploadStyles.inner}>
-                    {isUploading ? (
-                      <span style={{color: '#64748B'}}>Mengunggah file...</span>
-                    ) : newWI.file_url ? (
-                      <div style={{display: 'flex', alignItems: 'center', gap: '8px', color: '#10B981'}}>
-                        <CheckCircle size={18} /> <span>PDF Terunggah</span>
-                      </div>
-                    ) : (
-                      <div style={{display: 'flex', alignItems: 'center', gap: '8px', color: '#64748B'}}>
-                        <Upload size={18} /> <span>Klik untuk Pilih PDF WI</span>
-                      </div>
-                    )}
+                    {isUploading ? <span style={{color: '#64748B'}}>Mengunggah...</span> : newWI.file_url ? <div style={{display: 'flex', alignItems: 'center', gap: '8px', color: '#10B981'}}><CheckCircle size={18} /> <span>PDF OK</span></div> : <div style={{display: 'flex', alignItems: 'center', gap: '8px', color: '#64748B'}}><Upload size={18} /> <span>Pilih PDF WI</span></div>}
                   </div>
-                  <input type="file" accept=".pdf" onChange={handleFileUpload} style={{display: 'none'}} />
+                  <input type="file" accept=".pdf" onChange={(e) => handleFileUpload(e, false)} style={{display: 'none'}} />
                 </label>
               </div>
 
-              <button 
-                type="submit" 
-                disabled={isUploading || !newWI.file_url} 
-                style={{
-                  ...modalStyles.btnSaveWI,
-                  background: (isUploading || !newWI.file_url) ? '#CBD5E1' : '#10B981'
-                }}
-              >
-                {isUploading ? 'Menunggu Upload...' : 'Simpan Master WI'}
+              <button type="submit" disabled={isUploading || !newWI.file_url} style={{...modalStyles.btnSaveWI, background: (isUploading || !newWI.file_url) ? '#CBD5E1' : '#10B981'}}>
+                {isUploading ? 'Tunggu...' : 'Simpan Master WI'}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL TICKET */}
-      {isModalTicket && (
+      {/* MODAL EDIT MASTER WI */}
+      {isModalEditWI && editingWI && (
         <div style={modalStyles.overlay}>
           <div style={modalStyles.content}>
             <div style={modalStyles.header}>
-              <h3>Buat Tiket {newTicket.ticket_type}</h3>
-              <button onClick={() => setIsModalTicket(false)} style={modalStyles.btnClose}>×</button>
+              <h3 style={{display:'flex', alignItems:'center', gap:'10px'}}><FileText size={20} color="#3B82F6"/> Edit Data WI</h3>
+              <button onClick={() => setIsModalEditWI(false)} style={modalStyles.btnClose}>×</button>
             </div>
-            <form onSubmit={handleSaveTicket} style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
-              <input style={modalStyles.input} placeholder="Nama Pelapor" required value={newTicket.requester_name} onChange={e=>setNewTicket({...newTicket, requester_name: e.target.value})}/>
-              <input style={modalStyles.input} placeholder="Part Number" required value={newTicket.part_number} onChange={e=>setNewTicket({...newTicket, part_number: e.target.value})}/>
-              <textarea style={{...modalStyles.input, height: '80px'}} placeholder="Deskripsi temuan" value={newTicket.description} onChange={e=>setNewTicket({...newTicket, description: e.target.value})}></textarea>
-              <button type="submit" style={modalStyles.btnSaveWI}>Kirim Tiket</button>
+            <form onSubmit={handleUpdateWI} style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                <input style={modalStyles.input} placeholder="Customer" value={editingWI.customer} onChange={e=>setEditingWI({...editingWI, customer: e.target.value})}/>
+                <input style={modalStyles.input} placeholder="Model" value={editingWI.model} onChange={e=>setEditingWI({...editingWI, model: e.target.value})}/>
+              </div>
+              
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                <input style={modalStyles.input} placeholder="Part Number" required value={editingWI.part_number} onChange={e=>setEditingWI({...editingWI, part_number: e.target.value})}/>
+                <input style={modalStyles.input} placeholder="Mold Number" value={editingWI.mold_number} onChange={e=>setEditingWI({...editingWI, mold_number: e.target.value})}/>
+              </div>
+
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                <input style={modalStyles.input} placeholder="Nama Proses" value={editingWI.process_name} onChange={e=>setEditingWI({...editingWI, process_name: e.target.value})}/>
+                <input style={modalStyles.input} placeholder="No. Revisi" value={editingWI.revision_no} onChange={e=>setEditingWI({...editingWI, revision_no: e.target.value})}/>
+              </div>
+
+              <input style={modalStyles.input} placeholder="Lokasi" value={editingWI.location} onChange={e=>setEditingWI({...editingWI, location: e.target.value})}/>
+              
+              <textarea style={{...modalStyles.input, height: '60px'}} placeholder="Remarks" value={editingWI.remarks} onChange={e=>setEditingWI({...editingWI, remarks: e.target.value})}/>
+              
+              <div style={{display:'flex', alignItems:'center', gap:'10px', background:'#FEF2F2', padding:'10px', borderRadius:'10px', border:'1px solid #FEE2E2'}}>
+                 <input 
+                   type="checkbox" 
+                   id="archive-check" 
+                   checked={editingWI.is_archived} 
+                   onChange={e => setEditingWI({...editingWI, is_archived: e.target.checked})} 
+                 />
+                 <label htmlFor="archive-check" style={{fontSize:'13px', color:'#991B1B', fontWeight:'bold', display:'flex', alignItems:'center', gap:'5px'}}>
+                   <Archive size={14}/> Arsipkan data ini (Sembunyikan dari Library)
+                 </label>
+              </div>
+
+              <div style={{...uploadStyles.container, borderColor: '#3B82F6', background: '#EFF6FF'}}>
+                <label style={uploadStyles.label}>
+                  <div style={uploadStyles.inner}>
+                    {isUploading ? <span style={{color: '#3B82F6'}}>Mengganti file...</span> : <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#1D4ED8'}}><div style={{display: 'flex', alignItems: 'center', gap: '8px'}}><Upload size={16} /> <span>Ganti PDF (Opsional)</span></div></div>}
+                  </div>
+                  <input type="file" accept=".pdf" onChange={(e) => handleFileUpload(e, true)} style={{display: 'none'}} />
+                </label>
+              </div>
+
+              <button type="submit" disabled={isUploading} style={{...modalStyles.btnSaveWI, background: '#3B82F6'}}>
+                {isUploading ? 'Tunggu...' : 'Update Perubahan'}
+              </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL REVISI */}
-      {isModalRevisi && (
-        <div style={modalStyles.overlay}>
-          <div style={modalStyles.content}>
-            <div style={modalStyles.header}>
-              <h3>{editMode ? 'Edit' : 'Tambah'} Revisi & Distribusi</h3>
-              <button onClick={() => setIsModalRevisi(false)} style={modalStyles.btnClose}>×</button>
-            </div>
-            <form onSubmit={handleSaveRevisi} style={{display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '70vh', overflowY: 'auto', padding: '5px'}}>
-              <input style={modalStyles.input} placeholder="Customer" value={newRevisi.customer} onChange={e=>setNewRevisi({...newRevisi, customer: e.target.value})}/>
-              <input style={modalStyles.input} placeholder="Part Number" value={newRevisi.part_number} onChange={e=>setNewRevisi({...newRevisi, part_number: e.target.value})}/>
-              <input style={modalStyles.input} placeholder="Keterangan Revisi" value={newRevisi.keterangan_revisi} onChange={e=>setNewRevisi({...newRevisi, keterangan_revisi: e.target.value})}/>
-              <button type="submit" style={modalStyles.btnSaveWI}>{editMode ? 'Update' : 'Simpan'} Data</button>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-const uploadStyles = {
-  container: {
-    border: '2px dashed #E2E8F0',
-    borderRadius: '12px',
-    padding: '10px',
-    textAlign: 'center',
-    cursor: 'pointer',
-    background: '#F8FAFC',
-    transition: '0.3s'
-  },
-  label: { cursor: 'pointer', display: 'block', width: '100%' },
-  inner: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40px', fontSize: '14px', fontWeight: '600' }
+// ... (Styles uiStyles, modalStyles, uploadStyles tetap sama seperti di code Puh)
+const uploadStyles = { 
+  container: { border: '2px dashed #E2E8F0', borderRadius: '12px', padding: '10px', textAlign: 'center', cursor: 'pointer', background: '#F8FAFC' }, 
+  label: { cursor: 'pointer', display: 'block', width: '100%' }, 
+  inner: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40px', fontSize: '14px', fontWeight: '600' } 
 };
 
-const uiStyles = {
-  loginOverlay: { height: '100vh', width: '100vw', background: '#F1F5F9', display: 'flex', justifyContent: 'center', alignItems: 'center' },
-  loginCard: { background: 'white', padding: '40px', borderRadius: '30px', textAlign: 'center', width: '90%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' },
-  loginBtnAdmin: { width: '100%', padding: '15px', borderRadius: '12px', border: 'none', background: '#1E293B', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold' },
-  loginBtnUser: { width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #E2E8F0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold' },
-  mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: window.innerWidth < 768 ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center' },
-  sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000 },
-  btnLogout: { background: 'white', border: '1px solid #E2E8F0', padding: '8px 15px', borderRadius: '10px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' }
+const uiStyles = { 
+  loginOverlay: { height: '100vh', width: '100vw', background: '#F1F5F9', display: 'flex', justifyContent: 'center', alignItems: 'center' }, 
+  loginCard: { background: 'white', padding: '40px', borderRadius: '30px', textAlign: 'center', width: '90%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }, 
+  loginBtnAdmin: { width: '100%', padding: '15px', borderRadius: '12px', border: 'none', background: '#1E293B', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold' }, 
+  loginBtnUser: { width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #E2E8F0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold' }, 
+  mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }, 
+  sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000 }, 
+  btnLogout: { background: 'white', border: '1px solid #E2E8F0', padding: '8px 15px', borderRadius: '10px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' } 
 };
 
-const modalStyles = {
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, backdropFilter: 'blur(2px)' },
-  content: { background: 'white', padding: '25px', borderRadius: '20px', width: '90%', maxWidth: '500px' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' },
-  input: { padding: '12px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '14px' },
-  btnSaveWI: { padding: '15px', background: '#10B981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
-  btnClose: { background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' }
+const modalStyles = { 
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, backdropFilter: 'blur(2px)' }, 
+  content: { background: 'white', padding: '25px', borderRadius: '20px', width: '90%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }, 
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }, 
+  input: { padding: '12px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '14px', width: '100%', boxSizing: 'border-box' }, 
+  btnSaveWI: { padding: '15px', background: '#10B981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }, 
+  btnClose: { background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' } 
 };
 
 export default App;
