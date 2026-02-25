@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import Sidebar from "./components/Sidebar";
 import { Menu, X, ShieldCheck, HardHat, LogOut, Upload, CheckCircle, FileText, Archive, Save, Users } from "lucide-react";
-import { QRCodeCanvas } from "qrcode.react"; // Tambahan Import QR
+import { QRCodeCanvas } from "qrcode.react"; 
 
 import Dashboard from "./components/Dashboard";
 import LogoProgress from "./components/LogoProgress";
@@ -12,7 +12,6 @@ import Revisi from "./components/Revisi";
 import WICenterLibrary from "./components/WICenterLibrary";
 
 function App() {
-  // State Role: 'unauthenticated', 'admin', atau 'guest_user'
   const [role, setRole] = useState("unauthenticated");
   const [menu, setMenu] = useState("dashboard");
   const [wiList, setWiList] = useState([]);
@@ -219,13 +218,19 @@ function App() {
       case "dashboard": 
         return <Dashboard wiList={wiList} ticketList={ticketList} revisiList={revisiList} role={role} />;
       case "library": 
+        // FILTER SECURITY: Guest tidak boleh lihat arsip
+        const displayWI = role === 'admin' 
+          ? wiList 
+          : wiList.filter(item => item.is_archived !== true);
+
         return (
           <WICenterLibrary 
-            wiList={wiList} 
+            wiList={displayWI} 
             role={role} 
             onEdit={(wi) => { setEditingWI(wi); setIsModalEditWI(true); }} 
             onOpenInputModal={() => setIsModalInputWI(true)} 
             onDelete={handleDeleteWI}
+            showQR={false} // Memberitahu komponen untuk tidak merender QR di card
           />
         );
       case "logo":
@@ -253,7 +258,6 @@ function App() {
     }
   };
 
-  // HALAMAN LOGIN AWAL
   if (role === "unauthenticated") {
     return (
       <div style={uiStyles.loginOverlay}>
@@ -271,7 +275,6 @@ function App() {
             </button>
           </div>
 
-          {/* QR GENERAL DI LOGIN PAGE */}
           <div style={uiStyles.qrGeneralContainer}>
              <p style={{fontSize: '11px', fontWeight: 'bold', color: '#475569', marginBottom: '10px'}}>QR CODE AKSES CEPAT (GENERAL)</p>
              <div style={uiStyles.qrWrapper}>
@@ -305,7 +308,7 @@ function App() {
         zIndex: 3000,
         overflow: 'hidden',
         background: 'white',
-        borderRight: '1px solid #E2E8F0' // Tambah border agar rapi
+        borderRight: '1px solid #E2E8F0'
       }}>
         <Sidebar role={role} menu={menu} setMenu={(m) => { setMenu(m); if(window.innerWidth < 768) setIsSidebarOpen(false); }} />
       </div>
@@ -317,11 +320,10 @@ function App() {
         transition: '0.3s',
         width: '100%'
       }}>
-        {/* Konten Utama */}
         {renderContent()}
       </main>
 
-      {/* MODAL INPUT & EDIT WI (Tetap Sama) */}
+      {/* MODAL INPUT WI */}
       {isModalInputWI && (
         <div style={modalStyles.overlay}>
           <div style={modalStyles.content}>
@@ -370,6 +372,7 @@ function App() {
         </div>
       )}
 
+      {/* MODAL EDIT WI */}
       {isModalEditWI && editingWI && (
         <div style={modalStyles.overlay}>
           <div style={modalStyles.content}>
@@ -382,19 +385,15 @@ function App() {
                 <input style={modalStyles.input} placeholder="Customer" value={editingWI.customer} onChange={e=>setEditingWI({...editingWI, customer: e.target.value})}/>
                 <input style={modalStyles.input} placeholder="Model" value={editingWI.model} onChange={e=>setEditingWI({...editingWI, model: e.target.value})}/>
               </div>
-              
               <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
                 <input style={modalStyles.input} placeholder="Part Number" required value={editingWI.part_number} onChange={e=>setEditingWI({...editingWI, part_number: e.target.value})}/>
                 <input style={modalStyles.input} placeholder="Mold Number" value={editingWI.mold_number} onChange={e=>setEditingWI({...editingWI, mold_number: e.target.value})}/>
               </div>
-
               <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
                 <input style={modalStyles.input} placeholder="Nama Proses" value={editingWI.process_name} onChange={e=>setEditingWI({...editingWI, process_name: e.target.value})}/>
                 <input style={modalStyles.input} placeholder="No. Revisi" value={editingWI.revision_no} onChange={e=>setEditingWI({...editingWI, revision_no: e.target.value})}/>
               </div>
-
               <input style={modalStyles.input} placeholder="Lokasi" value={editingWI.location} onChange={e=>setEditingWI({...editingWI, location: e.target.value})}/>
-              
               <textarea style={{...modalStyles.input, height: '60px'}} placeholder="Remarks" value={editingWI.remarks} onChange={e=>setEditingWI({...editingWI, remarks: e.target.value})}/>
               
               <div style={{display:'flex', alignItems:'center', gap:'10px', background:'#FEF2F2', padding:'10px', borderRadius:'10px', border:'1px solid #FEE2E2'}}>
@@ -425,12 +424,10 @@ function App() {
           </div>
         </div>
       )}
-
     </div>
   );
 }
 
-// STYLES UPDATE
 const uploadStyles = { 
   container: { border: '2px dashed #E2E8F0', borderRadius: '12px', padding: '10px', textAlign: 'center', cursor: 'pointer', background: '#F8FAFC' }, 
   label: { cursor: 'pointer', display: 'block', width: '100%' }, 
@@ -444,7 +441,6 @@ const uiStyles = {
   loginBtnUser: { width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #E2E8F0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', transition: '0.2s' }, 
   mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }, 
   sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000 }, 
-  btnLogout: { background: 'white', border: '1px solid #E2E8F0', padding: '8px 15px', borderRadius: '10px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' },
   qrGeneralContainer: { marginTop: '25px', paddingTop: '20px', borderTop: '1px dashed #E2E8F0', textAlign: 'center' },
   qrWrapper: { background: 'white', padding: '10px', borderRadius: '15px', display: 'inline-block', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }
 };

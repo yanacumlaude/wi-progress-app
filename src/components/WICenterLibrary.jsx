@@ -2,14 +2,12 @@ import React, { useState } from "react";
 import { 
   Search, ExternalLink, X, Layers, 
   MapPin, History, Info, Edit3, Plus,
-  Trash2, ArchiveRestore, Archive, QrCode, Printer
+  Trash2, ArchiveRestore, Archive, Printer
 } from "lucide-react";
-import { QRCodeCanvas } from "qrcode.react";
 
 export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal, onDelete }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("active"); // "active" atau "archived"
-  const [selectedLabel, setSelectedLabel] = useState(null); // Untuk Modal Print
 
   // Filter Data: Berdasarkan Search + Status Arsip
   const filteredWI = wiList.filter((wi) => {
@@ -22,10 +20,6 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
     const isArchived = wi.is_archived === true;
     return matchesSearch && (viewMode === "active" ? !isArchived : isArchived);
   });
-
-  const handlePrint = () => {
-    window.print();
-  };
 
   return (
     <div style={styles.container}>
@@ -40,13 +34,16 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
         </div>
         
         <div style={styles.actionWrapper}>
-          <button 
-            onClick={() => setViewMode(viewMode === "active" ? "archived" : "active")}
-            style={{...styles.btnAction, background: viewMode === "active" ? '#64748B' : '#F59E0B'}}
-          >
-            {viewMode === "active" ? <Archive size={18} /> : <ArchiveRestore size={18} />}
-            {viewMode === "active" ? "Lihat Arsip" : "Kembali ke Library"}
-          </button>
+          {/* SECURITY: Hanya Admin yang boleh ganti view ke Arsip */}
+          {role === 'admin' && (
+            <button 
+              onClick={() => setViewMode(viewMode === "active" ? "archived" : "active")}
+              style={{...styles.btnAction, background: viewMode === "active" ? '#64748B' : '#F59E0B'}}
+            >
+              {viewMode === "active" ? <Archive size={18} /> : <ArchiveRestore size={18} />}
+              {viewMode === "active" ? "Lihat Arsip" : "Kembali ke Library"}
+            </button>
+          )}
 
           {role === 'admin' && viewMode === "active" && (
             <button onClick={onOpenInputModal} style={{...styles.btnAction, background: '#10B981'}}>
@@ -105,9 +102,6 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
               </a>
               {role === 'admin' && (
                 <>
-                  <button onClick={() => setSelectedLabel(wi)} style={styles.btnQr}>
-                    <QrCode size={18} />
-                  </button>
                   <button onClick={() => onEdit(wi)} style={styles.btnEdit}>
                     <Edit3 size={16} />
                   </button>
@@ -124,60 +118,6 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
           </div>
         )}
       </div>
-
-      {/* MODAL PREVIEW LABEL QR */}
-      {selectedLabel && (
-        <div style={styles.modalOverlay} className="no-print">
-          <div style={styles.modalContent}>
-            <div style={styles.modalHeader}>
-              <h3>Preview Label QR</h3>
-              <button onClick={() => setSelectedLabel(null)} style={styles.btnClose}><X /></button>
-            </div>
-            
-            <div id="printable-label" style={styles.labelPreview}>
-              <div style={styles.labelBrand}>WI DIGITAL SYSTEM</div>
-              <div style={styles.labelBody}>
-                <div style={styles.labelInfo}>
-                  <div style={styles.labelPart}>{selectedLabel.part_number}</div>
-                  <div style={styles.labelSub}>{selectedLabel.customer} | {selectedLabel.model}</div>
-                  <div style={styles.labelSub}>Process: {selectedLabel.process_name}</div>
-                  <div style={styles.labelRev}>REVISI: {selectedLabel.revision_no || '00'}</div>
-                </div>
-                <div style={styles.labelQrWrapper}>
-                  <QRCodeCanvas 
-                    value={`${window.location.origin}?mode=library`} 
-                    size={100}
-                    level="H"
-                  />
-                </div>
-              </div>
-              <div style={styles.labelFooter}>Scan to access digital documentation</div>
-            </div>
-
-            <button onClick={handlePrint} style={styles.btnPrint}>
-              <Printer size={20} /> Cetak Label Sekarang
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* CSS KHUSUS PRINT */}
-      <style>
-        {`
-          @media print {
-            body * { visibility: hidden; }
-            #printable-label, #printable-label * { visibility: visible; }
-            #printable-label { 
-              position: absolute; 
-              left: 50%; 
-              top: 20px; 
-              transform: translateX(-50%);
-              border: 2px solid black !important;
-            }
-            .no-print { display: none !important; }
-          }
-        `}
-      </style>
     </div>
   );
 }
@@ -208,33 +148,6 @@ const styles = {
   cardActions: { display: 'flex', gap: '8px' },
   btnOpen: { flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px', borderRadius: '10px', background: '#10B981', color: 'white', textDecoration: 'none', fontWeight: 'bold', fontSize: '12px' },
   btnEdit: { width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', borderRadius: '10px', background: 'white', border: '1px solid #3B82F6', color: '#3B82F6', cursor: 'pointer' },
-  btnQr: { width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', borderRadius: '10px', background: 'white', border: '1px solid #6366F1', color: '#6366F1', cursor: 'pointer' },
   btnDelete: { width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', borderRadius: '10px', background: 'white', border: '1px solid #EF4444', color: '#EF4444', cursor: 'pointer' },
-  emptyState: { gridColumn: '1/-1', textAlign: 'center', padding: '50px', color: '#64748B', background: 'white', borderRadius: '16px' },
-
-  // MODAL STYLES
-  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 },
-  modalContent: { background: 'white', padding: '30px', borderRadius: '20px', width: '450px', textAlign: 'center' },
-  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
-  btnClose: { background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' },
-  btnPrint: { width: '100%', marginTop: '20px', padding: '15px', borderRadius: '12px', background: '#1E293B', color: 'white', fontWeight: 'bold', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' },
-  
-  // LABEL STYLES (Printable)
-  labelPreview: { 
-    border: '1px solid #E2E8F0', 
-    padding: '20px', 
-    borderRadius: '8px', 
-    backgroundColor: 'white',
-    color: 'black',
-    textAlign: 'left',
-    fontFamily: 'sans-serif'
-  },
-  labelBrand: { fontSize: '10px', fontWeight: 'bold', borderBottom: '1px solid black', paddingBottom: '5px', marginBottom: '10px' },
-  labelBody: { display: 'flex', justifyContent: 'space-between', gap: '15px' },
-  labelInfo: { flex: 1 },
-  labelPart: { fontSize: '18px', fontWeight: 'bold', marginBottom: '5px' },
-  labelSub: { fontSize: '11px', marginBottom: '2px' },
-  labelRev: { fontSize: '12px', fontWeight: 'bold', marginTop: '10px', color: 'white', background: 'black', padding: '2px 5px', display: 'inline-block' },
-  labelQrWrapper: { padding: '5px', border: '1px solid #EEE' },
-  labelFooter: { fontSize: '9px', fontStyle: 'italic', marginTop: '15px', textAlign: 'center', opacity: 0.7 }
+  emptyState: { gridColumn: '1/-1', textAlign: 'center', padding: '50px', color: '#64748B', background: 'white', borderRadius: '16px' }
 };
