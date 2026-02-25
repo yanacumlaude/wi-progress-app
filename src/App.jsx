@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import Sidebar from "./components/Sidebar";
 import { Menu, X, ShieldCheck, HardHat, LogOut, Upload, CheckCircle, FileText, Archive, Save, Users } from "lucide-react";
+import { QRCodeCanvas } from "qrcode.react"; // Tambahan Import QR
 
 import Dashboard from "./components/Dashboard";
 import LogoProgress from "./components/LogoProgress";
@@ -83,11 +84,10 @@ function App() {
   };
 
   useEffect(() => { 
-    // CEK LINK SCAN QR (?mode=library)
     const queryParams = new URLSearchParams(window.location.search);
     if (queryParams.get("mode") === "library") {
-      setRole("guest_user"); // Langsung masuk sebagai guest
-      setMenu("library");    // Langsung arahkan ke library
+      setRole("guest_user"); 
+      setMenu("library");    
     }
 
     fetchData();
@@ -270,6 +270,16 @@ function App() {
               <Users size={20} /> Masuk sebagai Guest
             </button>
           </div>
+
+          {/* QR GENERAL DI LOGIN PAGE */}
+          <div style={uiStyles.qrGeneralContainer}>
+             <p style={{fontSize: '11px', fontWeight: 'bold', color: '#475569', marginBottom: '10px'}}>QR CODE AKSES CEPAT (GENERAL)</p>
+             <div style={uiStyles.qrWrapper}>
+                <QRCodeCanvas value={`${window.location.origin}?mode=library`} size={130} />
+             </div>
+             <p style={{fontSize: '10px', color: '#94A3B8', marginTop: '10px'}}>Scan untuk buka Library tanpa login</p>
+          </div>
+
           <div style={{marginTop: '25px', fontSize: '11px', color: '#CBD5E1'}}>Digital Documentation System v2.0</div>
         </div>
       </div>
@@ -294,29 +304,24 @@ function App() {
         height: '100vh', 
         zIndex: 3000,
         overflow: 'hidden',
-        background: 'white'
+        background: 'white',
+        borderRight: '1px solid #E2E8F0' // Tambah border agar rapi
       }}>
         <Sidebar role={role} menu={menu} setMenu={(m) => { setMenu(m); if(window.innerWidth < 768) setIsSidebarOpen(false); }} />
       </div>
       
       <main style={{ 
         flex: 1, 
-        padding: window.innerWidth < 768 ? '15px' : '30px', 
+        padding: window.innerWidth < 768 ? '20px 15px' : '30px', 
         marginLeft: isSidebarOpen && window.innerWidth > 768 ? '260px' : '0', 
         transition: '0.3s',
         width: '100%'
       }}>
-        {/* Tombol Logout untuk keluar dari role */}
-        <div style={{display:'flex', justifyContent:'flex-end', marginBottom:'15px'}} className="no-print">
-           <button onClick={() => setRole('unauthenticated')} style={uiStyles.btnLogout}>
-             <LogOut size={16}/> Logout
-           </button>
-        </div>
-
+        {/* Konten Utama */}
         {renderContent()}
       </main>
 
-      {/* MODAL INPUT & EDIT (Tetap sama seperti aslinya) */}
+      {/* MODAL INPUT & EDIT WI (Tetap Sama) */}
       {isModalInputWI && (
         <div style={modalStyles.overlay}>
           <div style={modalStyles.content}>
@@ -425,6 +430,7 @@ function App() {
   );
 }
 
+// STYLES UPDATE
 const uploadStyles = { 
   container: { border: '2px dashed #E2E8F0', borderRadius: '12px', padding: '10px', textAlign: 'center', cursor: 'pointer', background: '#F8FAFC' }, 
   label: { cursor: 'pointer', display: 'block', width: '100%' }, 
@@ -433,12 +439,14 @@ const uploadStyles = {
 
 const uiStyles = { 
   loginOverlay: { height: '100vh', width: '100vw', background: '#F1F5F9', display: 'flex', justifyContent: 'center', alignItems: 'center' }, 
-  loginCard: { background: 'white', padding: '40px', borderRadius: '30px', textAlign: 'center', width: '90%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }, 
+  loginCard: { background: 'white', padding: '30px', borderRadius: '30px', textAlign: 'center', width: '90%', maxWidth: '420px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }, 
   loginBtnAdmin: { width: '100%', padding: '15px', borderRadius: '12px', border: 'none', background: '#1E293B', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', transition: '0.2s' }, 
   loginBtnUser: { width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #E2E8F0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', transition: '0.2s' }, 
   mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }, 
   sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000 }, 
-  btnLogout: { background: 'white', border: '1px solid #E2E8F0', padding: '8px 15px', borderRadius: '10px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' } 
+  btnLogout: { background: 'white', border: '1px solid #E2E8F0', padding: '8px 15px', borderRadius: '10px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' },
+  qrGeneralContainer: { marginTop: '25px', paddingTop: '20px', borderTop: '1px dashed #E2E8F0', textAlign: 'center' },
+  qrWrapper: { background: 'white', padding: '10px', borderRadius: '15px', display: 'inline-block', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }
 };
 
 const modalStyles = { 
