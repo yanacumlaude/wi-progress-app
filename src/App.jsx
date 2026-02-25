@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import Sidebar from "./components/Sidebar";
-import { Menu, X, ShieldCheck, HardHat, LogOut, Upload, CheckCircle, FileText, Archive, Save } from "lucide-react";
+import { Menu, X, ShieldCheck, HardHat, LogOut, Upload, CheckCircle, FileText, Archive, Save, Users } from "lucide-react";
 
 import Dashboard from "./components/Dashboard";
 import LogoProgress from "./components/LogoProgress";
@@ -11,7 +11,8 @@ import Revisi from "./components/Revisi";
 import WICenterLibrary from "./components/WICenterLibrary";
 
 function App() {
-  const [role, setRole] = useState("guest");
+  // State Role: 'unauthenticated', 'admin', atau 'guest_user'
+  const [role, setRole] = useState("unauthenticated");
   const [menu, setMenu] = useState("dashboard");
   const [wiList, setWiList] = useState([]);
   const [revisiList, setRevisiList] = useState([]);
@@ -68,7 +69,7 @@ function App() {
       const { data: wi } = await supabase
         .from('wi_data')
         .select('*')
-        .order('id', { ascending: false }); // Filter is_archived dihapus agar data arsip tetap ter-fetch
+        .order('id', { ascending: false });
         
       const { data: rev } = await supabase.from('revisi_wi').select('*').order('id', { ascending: false });
       const { data: tick } = await supabase.from('wi_tickets').select('*').order('id', { ascending: false });
@@ -82,6 +83,13 @@ function App() {
   };
 
   useEffect(() => { 
+    // CEK LINK SCAN QR (?mode=library)
+    const queryParams = new URLSearchParams(window.location.search);
+    if (queryParams.get("mode") === "library") {
+      setRole("guest_user"); // Langsung masuk sebagai guest
+      setMenu("library");    // Langsung arahkan ke library
+    }
+
     fetchData();
     const handleResize = () => {
       if (window.innerWidth < 768) setIsSidebarOpen(false);
@@ -172,7 +180,6 @@ function App() {
     }
   };
 
-  // Fungsi Hapus Permanen Baru
   const handleDeleteWI = async (id) => {
     if (window.confirm("Puh, yakin mau hapus permanen data ini? Tindakan ini tidak bisa dibatalkan!")) {
       const { error } = await supabase.from('wi_data').delete().eq('id', id);
@@ -246,16 +253,24 @@ function App() {
     }
   };
 
-  if (role === "guest") {
+  // HALAMAN LOGIN AWAL
+  if (role === "unauthenticated") {
     return (
       <div style={uiStyles.loginOverlay}>
         <div style={uiStyles.loginCard}>
           <ShieldCheck size={48} color="#10B981" style={{marginBottom: '20px'}} />
-          <h2 style={{margin: '0 0 20px 0'}}>WI CENTER HUB</h2>
+          <h2 style={{margin: '0 0 10px 0', color: '#1E293B'}}>WI CENTER HUB</h2>
+          <p style={{margin: '0 0 25px 0', color: '#64748B', fontSize: '14px'}}>Pilih akses untuk melanjutkan</p>
+          
           <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
-            <button onClick={() => setRole('admin')} style={uiStyles.loginBtnAdmin}><ShieldCheck size={20} /> Admin Engineering</button>
-            <button onClick={() => setRole('operator')} style={uiStyles.loginBtnUser}><HardHat size={20} /> Operator Produksi</button>
+            <button onClick={() => setRole('admin')} style={uiStyles.loginBtnAdmin}>
+              <ShieldCheck size={20} /> Admin Engineering
+            </button>
+            <button onClick={() => setRole('guest_user')} style={uiStyles.loginBtnUser}>
+              <Users size={20} /> Masuk sebagai Guest
+            </button>
           </div>
+          <div style={{marginTop: '25px', fontSize: '11px', color: '#CBD5E1'}}>Digital Documentation System v2.0</div>
         </div>
       </div>
     );
@@ -291,10 +306,17 @@ function App() {
         transition: '0.3s',
         width: '100%'
       }}>
+        {/* Tombol Logout untuk keluar dari role */}
+        <div style={{display:'flex', justifyContent:'flex-end', marginBottom:'15px'}} className="no-print">
+           <button onClick={() => setRole('unauthenticated')} style={uiStyles.btnLogout}>
+             <LogOut size={16}/> Logout
+           </button>
+        </div>
+
         {renderContent()}
       </main>
 
-      {/* MODAL INPUT MASTER WI */}
+      {/* MODAL INPUT & EDIT (Tetap sama seperti aslinya) */}
       {isModalInputWI && (
         <div style={modalStyles.overlay}>
           <div style={modalStyles.content}>
@@ -343,7 +365,6 @@ function App() {
         </div>
       )}
 
-      {/* MODAL EDIT MASTER WI */}
       {isModalEditWI && editingWI && (
         <div style={modalStyles.overlay}>
           <div style={modalStyles.content}>
@@ -404,7 +425,6 @@ function App() {
   );
 }
 
-// ... (Styles uiStyles, modalStyles, uploadStyles tetap sama seperti di code Puh)
 const uploadStyles = { 
   container: { border: '2px dashed #E2E8F0', borderRadius: '12px', padding: '10px', textAlign: 'center', cursor: 'pointer', background: '#F8FAFC' }, 
   label: { cursor: 'pointer', display: 'block', width: '100%' }, 
@@ -414,8 +434,8 @@ const uploadStyles = {
 const uiStyles = { 
   loginOverlay: { height: '100vh', width: '100vw', background: '#F1F5F9', display: 'flex', justifyContent: 'center', alignItems: 'center' }, 
   loginCard: { background: 'white', padding: '40px', borderRadius: '30px', textAlign: 'center', width: '90%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }, 
-  loginBtnAdmin: { width: '100%', padding: '15px', borderRadius: '12px', border: 'none', background: '#1E293B', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold' }, 
-  loginBtnUser: { width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #E2E8F0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold' }, 
+  loginBtnAdmin: { width: '100%', padding: '15px', borderRadius: '12px', border: 'none', background: '#1E293B', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', transition: '0.2s' }, 
+  loginBtnUser: { width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #E2E8F0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', transition: '0.2s' }, 
   mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }, 
   sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000 }, 
   btnLogout: { background: 'white', border: '1px solid #E2E8F0', padding: '8px 15px', borderRadius: '10px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' } 
