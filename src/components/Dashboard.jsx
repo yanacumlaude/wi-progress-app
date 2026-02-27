@@ -1,25 +1,17 @@
 import React from "react";
 import { 
   BarChart3, AlertCircle, CheckCircle2, FileEdit, 
-  ArrowUpRight, Clock, PlusCircle, LayoutDashboard, 
-  Activity, ShieldCheck, Layers, ClipboardList, ListTodo
+  Layers, Clock, ShieldCheck, Activity, User
 } from "lucide-react";
 
-export default function Dashboard({ wiList = [], ticketList = [], revisiList = [] }) {
-  // Logic Filter Data - Pastikan selalu array agar .length tidak error
-  const safeRevisi = Array.isArray(revisiList) ? revisiList : [];
-  const safeTickets = Array.isArray(ticketList) ? ticketList : [];
+export default function Dashboard({ wiList = [], logs = [], userSession = "" }) {
+  // Logic Filter Data
   const safeWI = Array.isArray(wiList) ? wiList : [];
+  const safeLogs = Array.isArray(logs) ? logs : [];
 
   const totalWI = safeWI.length;
-  
-  // Progress Pipeline
-  const inRevision = safeRevisi.filter(r => r.status === 'In Progress').length;
-  const readyToDistribute = safeRevisi.filter(r => r.status === 'Ready' || !r.status).length;
-  const distributed = safeRevisi.filter(r => r.status === 'Distributed').length;
-
-  // Breakdown WI per Tipe
-  const openFindings = safeTickets.filter(t => t.status === 'Open').length;
+  const activeWI = safeWI.filter(wi => !wi.is_archived).length;
+  const obsoleteWI = safeWI.filter(wi => wi.is_archived).length;
 
   const isMobile = window.innerWidth < 768;
 
@@ -28,121 +20,118 @@ export default function Dashboard({ wiList = [], ticketList = [], revisiList = [
       {/* HEADER SECTION */}
       <header style={styles.header}>
         <div style={{ flex: 1 }}>
-          <h1 style={styles.welcomeText}>WI PROGRESS TRACKER</h1>
-          <p style={styles.subText}>Transparansi Dokumen & Monitoring</p>
+          <h1 style={styles.welcomeText}>OPERATIONAL DASHBOARD</h1>
+          <p style={styles.subText}>Selamat Bekerja, <strong>Divisi {userSession || "General"}</strong></p>
         </div>
         {!isMobile && (
           <div style={styles.liveStatus}>
             <div style={styles.statusDot}></div>
-            <span>SISTEM TERKONEKSI</span>
+            <span>SISTEM TERPANTAU</span>
           </div>
         )}
       </header>
 
-      {/* 1. PROGRESS PIPELINE */}
+      {/* 1. KEY PERFORMANCE INDICATORS (KPI) */}
       <div style={styles.pipelineContainer}>
         <div style={styles.pipelineHeader}>
-          <h3 style={styles.cardTitle}>ALUR PROSES DISTRIBUSI WI</h3>
-          <span style={styles.infoBadge}>Swipe untuk detail →</span>
+          <h3 style={styles.cardTitle}>RINGKASAN DATABASE WI</h3>
+          <span style={styles.infoBadge}>Live Summary</span>
         </div>
-        <div style={styles.scrollArea}>
-          <div style={styles.pipelineGrid}>
-            <div style={styles.stepCard}>
-              <div style={{...styles.stepIcon, background: '#E0F2FE'}}><FileEdit size={20} color="#0EA5E9"/></div>
-              <div>
-                <p style={styles.stepLabel}>TAHAP REVISI</p>
-                <h2 style={styles.stepValue}>{inRevision} <span style={styles.unit}>Docs</span></h2>
-              </div>
+        <div style={styles.pipelineGrid}>
+          <div style={styles.stepCard}>
+            <div style={{...styles.stepIcon, background: '#E0F2FE'}}><Layers size={20} color="#0EA5E9"/></div>
+            <div>
+              <p style={styles.stepLabel}>TOTAL DATABASE</p>
+              <h2 style={styles.stepValue}>{totalWI} <span style={styles.unit}>Items</span></h2>
             </div>
-            <div style={styles.arrow}>→</div>
-            <div style={styles.stepCard}>
-              <div style={{...styles.stepIcon, background: '#FFF7ED'}}><Clock size={20} color="#F97316"/></div>
-              <div>
-                <p style={styles.stepLabel}>SIAP DISTRIBUSI</p>
-                <h2 style={styles.stepValue}>{readyToDistribute} <span style={styles.unit}>Docs</span></h2>
-              </div>
+          </div>
+          <div style={styles.arrow}>|</div>
+          <div style={styles.stepCard}>
+            <div style={{...styles.stepIcon, background: '#DCFCE7'}}><CheckCircle2 size={20} color="#22C55E"/></div>
+            <div>
+              <p style={styles.stepLabel}>ACTIVE (USE)</p>
+              <h2 style={styles.stepValue}>{activeWI} <span style={styles.unit}>Docs</span></h2>
             </div>
-            <div style={styles.arrow}>→</div>
-            <div style={styles.stepCard}>
-              <div style={{...styles.stepIcon, background: '#DCFCE7'}}><CheckCircle2 size={20} color="#22C55E"/></div>
-              <div>
-                <p style={styles.stepLabel}>TERPASANG DI LINE</p>
-                <h2 style={styles.stepValue}>{distributed} <span style={styles.unit}>Docs</span></h2>
-              </div>
+          </div>
+          <div style={styles.arrow}>|</div>
+          <div style={styles.stepCard}>
+            <div style={{...styles.stepIcon, background: '#FEF2F2'}}><AlertCircle size={20} color="#EF4444"/></div>
+            <div>
+              <p style={styles.stepLabel}>OBSOLETE</p>
+              <h2 style={styles.stepValue}>{obsoleteWI} <span style={styles.unit}>Docs</span></h2>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. SUMMARY CARDS */}
-      <div style={styles.statsGrid}>
-        <div style={styles.statCard}>
-          <div style={styles.statContent}>
-            <p style={styles.statLabel}>DATABASE MASTER WI</p>
-            <h3 style={styles.statValue}>{totalWI}</h3>
-          </div>
-          <Layers color="#6366F1" size={32} opacity={0.2} />
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statContent}>
-            <p style={styles.statLabel}>OPEN FINDINGS</p>
-            <h3 style={{...styles.statValue, color: '#EF4444'}}>{openFindings}</h3>
-          </div>
-          <AlertCircle color="#EF4444" size={32} opacity={0.2} />
-        </div>
-      </div>
-
-      {/* 3. LOWER SECTION */}
+      {/* 2. MAIN SECTION: AUDIT TRAIL & LOGS */}
       <div style={styles.mainGrid}>
+        {/* TABEL RIWAYAT AKTIVITAS (Ini yang bikin Bos Terperangah) */}
         <div style={styles.tableCard}>
-          <h3 style={styles.cardTitle}>AKTIVITAS TERKINI</h3>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
+            <h3 style={styles.cardTitle}><Activity size={16} style={{marginRight: '8px'}}/> AUDIT TRAIL (LOG AKTIVITAS)</h3>
+            <span style={{fontSize:'10px', color:'#10B981', fontWeight:'bold'}}>REAL-TIME UPDATE</span>
+          </div>
           <div style={styles.scrollArea}>
             <table style={styles.table}>
               <thead>
                 <tr style={styles.trHead}>
-                  <th>PART NUMBER</th>
-                  <th>MODEL</th>
-                  <th>JENIS WI</th>
-                  <th>PROGRES</th>
+                  <th style={{paddingBottom: '10px'}}>WAKTU</th>
+                  <th style={{paddingBottom: '10px'}}>PELAKSANA</th>
+                  <th style={{paddingBottom: '10px'}}>TINDAKAN</th>
+                  <th style={{paddingBottom: '10px'}}>TARGET PART</th>
                 </tr>
               </thead>
               <tbody>
-                {safeRevisi.length > 0 ? safeRevisi.slice(0, 5).map(r => (
-                  <tr key={r.id} style={styles.trBody}>
-                    {/* Menggunakan Optional Chaining karena data master mungkin belum terload */}
-                    <td style={{fontWeight: 'bold'}}>{r.wi_master?.part_number || r.part_number || '-'}</td>
-                    <td>{r.wi_master?.model || r.model || '-'}</td>
-                    <td>{r.wi_type || 'FG'}</td>
+                {safeLogs.length > 0 ? safeLogs.slice(0, 8).map(log => (
+                  <tr key={log.id} style={styles.trBody}>
+                    <td style={{padding: '12px 0', color: '#64748B'}}>
+                        {new Date(log.created_at).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}
+                    </td>
                     <td>
-                      <span style={styles.statusBadge(r.status)}>{r.status || 'Ready'}</span>
+                        <div style={{display:'flex', alignItems:'center', gap:'5px'}}>
+                            <div style={{width:'20px', height:'20px', borderRadius:'50%', background:'#F1F5F9', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                                <User size={12} color="#94A3B8"/>
+                            </div>
+                            <span style={{fontWeight: 'bold', fontSize:'11px'}}>{log.user_name}</span>
+                        </div>
+                    </td>
+                    <td style={{fontSize:'11px'}}>{log.action}</td>
+                    <td>
+                        <span style={styles.partBadge}>{log.target_item || '-'}</span>
                     </td>
                   </tr>
                 )) : (
-                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '20px', color: '#94A3B8'}}>Belum ada aktivitas.</td></tr>
+                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '40px', color: '#94A3B8'}}>Belum ada aktivitas tercatat.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Executive Summary - TITIK ERROR SEBELUMNYA ADA DI SINI */}
+        {/* SUMMARY CARD (RIGHT SIDE) */}
         <div style={styles.summaryCard}>
-          <h3 style={{...styles.cardTitle, color: 'white', marginBottom: '15px'}}>EXECUTIVE SUMMARY</h3>
+          <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom: '20px'}}>
+             <ShieldCheck size={24} color="#38BDF8"/>
+             <h3 style={{...styles.cardTitle, color: 'white', margin: 0}}>SISTEM INTEGRITI</h3>
+          </div>
+          
           <div style={styles.summaryItem}>
             <div style={styles.bullet}></div>
-            <p style={styles.summaryText}><strong>{inRevision} WI</strong> sedang dalam proses update.</p>
+            <p style={styles.summaryText}>Akses login tercatat otomatis berdasarkan <strong>Nama Divisi</strong>.</p>
           </div>
           <div style={styles.summaryItem}>
             <div style={styles.bullet}></div>
-            <p style={styles.summaryText}><strong>{openFindings} Temuan</strong> menunggu verifikasi.</p>
+            <p style={styles.summaryText}>Setiap perubahan status <strong>Obsolete</strong> akan mencatat ID pelaksana.</p>
           </div>
           <div style={styles.summaryItem}>
             <div style={styles.bullet}></div>
-            {/* Safety Check: Menggunakan optional chaining dan fallback text */}
-            <p style={styles.summaryText}>Update terakhir: <strong>{safeRevisi[0]?.location || 'Tidak ada data'}</strong>.</p>
+            <p style={styles.summaryText}>Data master aman dengan backup di <strong>Supabase Cloud</strong>.</p>
           </div>
+
           <div style={styles.tipBox}>
-              <p style={{margin: 0}}>*Data real-time pusat dokumen.</p>
+              <p style={{margin: 0, fontWeight:'bold', color:'white'}}>Tips Atasan:</p>
+              <p style={{margin: '5px 0 0 0'}}>Gunakan fitur filter di menu Library untuk mencari Mold Number lebih spesifik.</p>
           </div>
         </div>
       </div>
@@ -150,44 +139,34 @@ export default function Dashboard({ wiList = [], ticketList = [], revisiList = [
   );
 }
 
-// ... styles tetap sama seperti kode Puh ...
 const styles = {
-  // (Paste semua styles dari kode Puh yang tadi ke sini)
-  wrapper: { display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', paddingBottom: '80px' },
+  wrapper: { display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', paddingBottom: '40px' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' },
   welcomeText: { fontSize: '20px', fontWeight: '900', color: '#1E293B', margin: 0 },
-  subText: { color: '#64748B', fontSize: '12px', margin: 0 },
+  subText: { color: '#64748B', fontSize: '13px', margin: 0 },
   liveStatus: { display: 'flex', alignItems: 'center', gap: '8px', background: 'white', padding: '6px 12px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold', border: '1px solid #E2E8F0' },
   statusDot: { width: '8px', height: '8px', background: '#22C55E', borderRadius: '50%', boxShadow: '0 0 8px #22C55E' },
-  pipelineContainer: { background: 'white', padding: '20px', borderRadius: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' },
-  pipelineHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '15px' },
-  scrollArea: { overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' },
-  pipelineGrid: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: '600px' },
-  stepCard: { display: 'flex', alignItems: 'center', gap: '12px', flex: 1 },
-  stepIcon: { padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center' },
+  pipelineContainer: { background: 'white', padding: '20px', borderRadius: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #F1F5F9' },
+  pipelineHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '20px' },
+  pipelineGrid: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '20px' },
+  stepCard: { display: 'flex', alignItems: 'center', gap: '12px', minWidth: '150px' },
+  stepIcon: { padding: '12px', borderRadius: '15px', display: 'flex', alignItems: 'center' },
   stepLabel: { fontSize: '10px', fontWeight: '800', color: '#94A3B8', margin: 0 },
-  stepValue: { fontSize: '18px', fontWeight: '800', color: '#1E293B', margin: 0 },
+  stepValue: { fontSize: '20px', fontWeight: '900', color: '#1E293B', margin: 0 },
   unit: { fontSize: '11px', fontWeight: '400', color: '#64748B' },
-  arrow: { color: '#CBD5E1', fontWeight: 'bold', padding: '0 10px' },
-  statsGrid: { display: 'grid', gridTemplateColumns: window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap: '15px' },
-  statCard: { background: 'white', padding: '20px', borderRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #F1F5F9' },
-  statLabel: { fontSize: '10px', fontWeight: '800', color: '#94A3B8', letterSpacing: '0.5px' },
-  statValue: { fontSize: '24px', fontWeight: '800', margin: '5px 0' },
-  mainGrid: { display: 'grid', gridTemplateColumns: window.innerWidth < 768 ? '1fr' : '1.8fr 1fr', gap: '20px' },
-  tableCard: { background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid #F1F5F9' },
-  table: { width: '100%', borderCollapse: 'collapse', marginTop: '10px', minWidth: '450px' },
-  trHead: { textAlign: 'left', fontSize: '10px', color: '#94A3B8', borderBottom: '1px solid #F1F5F9' },
-  trBody: { borderBottom: '1px solid #F1F5F9', fontSize: '12px' },
-  statusBadge: (s) => ({
-    fontSize: '9px', fontWeight: 'bold', padding: '3px 8px', borderRadius: '6px',
-    background: s === 'Distributed' ? '#DCFCE7' : '#FEF3C7',
-    color: s === 'Distributed' ? '#166534' : '#92400E'
-  }),
-  summaryCard: { background: '#1E293B', padding: '20px', borderRadius: '25px', color: 'white' },
-  summaryItem: { display: 'flex', gap: '10px', marginBottom: '12px', alignItems: 'flex-start' },
-  summaryText: { margin: 0, fontSize: '12px', lineHeight: '1.5' },
-  bullet: { width: '6px', height: '6px', background: '#38BDF8', borderRadius: '50%', marginTop: '6px', flexShrink: 0 },
-  tipBox: { marginTop: '15px', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', fontSize: '10px', color: '#94A3B8' },
-  cardTitle: { fontSize: '13px', fontWeight: '800', color: '#475569', margin: 0 },
-  infoBadge: { fontSize: '10px', color: '#94A3B8' }
+  arrow: { color: '#E2E8F0', fontWeight: '100', fontSize: '20px' },
+  mainGrid: { display: 'grid', gridTemplateColumns: window.innerWidth < 1024 ? '1fr' : '2fr 1fr', gap: '20px' },
+  tableCard: { background: 'white', padding: '25px', borderRadius: '25px', border: '1px solid #F1F5F9' },
+  scrollArea: { overflowX: 'auto', width: '100%' },
+  table: { width: '100%', borderCollapse: 'collapse', marginTop: '10px' },
+  trHead: { textAlign: 'left', fontSize: '10px', color: '#94A3B8', borderBottom: '2px solid #F8FAFC' },
+  trBody: { borderBottom: '1px solid #F8FAFC', fontSize: '12px' },
+  partBadge: { padding: '4px 8px', background: '#EFF6FF', color: '#2563EB', borderRadius: '6px', fontWeight: 'bold', fontSize: '10px' },
+  summaryCard: { background: '#1E293B', padding: '25px', borderRadius: '30px', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'center' },
+  summaryItem: { display: 'flex', gap: '12px', marginBottom: '15px', alignItems: 'flex-start' },
+  summaryText: { margin: 0, fontSize: '13px', lineHeight: '1.6', color: '#CBD5E1' },
+  bullet: { width: '6px', height: '6px', background: '#10B981', borderRadius: '50%', marginTop: '8px', flexShrink: 0 },
+  tipBox: { marginTop: '20px', padding: '15px', background: 'rgba(255,255,255,0.05)', borderRadius: '15px', fontSize: '11px', color: '#94A3B8', borderLeft: '4px solid #38BDF8' },
+  cardTitle: { fontSize: '14px', fontWeight: '900', color: '#475569', margin: 0, letterSpacing: '0.5px' },
+  infoBadge: { fontSize: '10px', color: '#10B981', background: '#DCFCE7', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold' }
 };
