@@ -1,11 +1,17 @@
 import React from "react";
-import { LayoutDashboard, BookOpen, ShieldCheck, LogOut, UserCircle } from "lucide-react";
+import { LayoutDashboard, BookOpen, ShieldCheck, LogOut, UserCircle, Clock } from "lucide-react"; // Tambah Clock icon
 
 export default function Sidebar({ role, menu, setMenu, userSession }) {
+  // DINAMIS MENU: Tambahkan Logs hanya jika role === admin
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
     { id: "library", label: "WI Library", icon: <BookOpen size={20} /> },
   ];
+
+  // Suntik menu logs jika admin
+  if (role === "admin") {
+    menuItems.push({ id: "logs", label: "System Logs", icon: <Clock size={20} /> });
+  }
 
   return (
     <div style={styles.sidebar}>
@@ -20,7 +26,7 @@ export default function Sidebar({ role, menu, setMenu, userSession }) {
         </div>
       </div>
 
-      {/* USER INFO SECTION (Fitur Baru) */}
+      {/* USER INFO SECTION */}
       <div style={styles.userProfile}>
         <div style={styles.avatarBox}>
           <UserCircle size={32} color="#64748B" />
@@ -114,7 +120,6 @@ const styles = {
     color: "#94A3B8", 
     fontWeight: "bold" 
   },
-  // STYLE BARU UNTUK PROFILE
   userProfile: {
     margin: "0 20px 20px 20px",
     padding: "15px",

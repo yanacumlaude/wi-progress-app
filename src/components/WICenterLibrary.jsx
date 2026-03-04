@@ -2,27 +2,27 @@ import React, { useState } from "react";
 import { 
   Search, ExternalLink, Plus, Trash2, 
   ArchiveRestore, Archive, Edit3, 
-  CheckCircle2, AlertCircle, Filter, Download 
+  CheckCircle2, AlertCircle, Filter, Download, HardDrive 
 } from "lucide-react";
-import * as XLSX from 'xlsx'; // Import untuk fitur Export
+import * as XLSX from 'xlsx';
 
-export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal, onDelete, onUpdateStatus }) {
+export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal, onDelete, storageUsage }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState("All");
   const [viewMode, setViewMode] = useState("active");
 
-  // AMBIL LIST CUSTOMER UNIK
   const customers = ["All", ...new Set(wiList.map(item => item.customer))].filter(Boolean);
 
-  // LOGIC STATISTIK
   const stats = {
     totalUse: wiList.filter(wi => !wi.is_archived).length,
     totalObsolete: wiList.filter(wi => wi.is_archived).length
   };
 
-  // FILTERING LOGIC
+  const storageLimit = 50; 
+  const storagePercent = Math.min((storageUsage / storageLimit) * 100, 100);
+
   const filteredWI = wiList.filter((wi) => {
-    const searchString = `${wi.part_number} ${wi.mold_number} ${wi.model} ${wi.customer} ${wi.process_name}`.toLowerCase();
+    const searchString = `${wi.part_number} ${wi.mold_number} ${wi.model} ${wi.customer} ${wi.process_name} ${wi.remarks || ""}`.toLowerCase();
     const matchesSearch = searchString.includes(searchTerm.toLowerCase());
     const matchesFilter = selectedCustomer === "All" || wi.customer === selectedCustomer;
     const isArchived = wi.is_archived === true;
@@ -30,7 +30,6 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
     return matchesSearch && matchesFilter && (viewMode === "active" ? !isArchived : isArchived);
   });
 
-  // FITUR BARU: EXPORT TO EXCEL
   const handleExportExcel = () => {
     const dataToExport = filteredWI.map(wi => ({
       Customer: wi.customer,
@@ -38,6 +37,7 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
       'Part Number': wi.part_number,
       'Mold Number': wi.mold_number,
       Model: wi.model,
+      Remarks: wi.remarks, // Tambahkan di export excel juga
       Revision: wi.revision_no,
       Status: wi.is_archived ? 'OBSOLETE' : 'USE'
     }));
@@ -48,7 +48,6 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
     XLSX.writeFile(wb, `WI_Report_${new Date().toLocaleDateString()}.xlsx`);
   };
 
-  // FITUR BARU: HIGHLIGHT SEARCH TEXT
   const highlightText = (text, highlight) => {
     if (!highlight.trim()) return text;
     const parts = String(text).split(new RegExp(`(${highlight})`, 'gi'));
@@ -66,7 +65,7 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
   return (
     <div style={styles.container}>
       
-      {/* 1. STATS SUMMARY CARDS */}
+      {/* 1. STATS ROW */}
       <div style={styles.statsRow}>
         <div style={{...styles.statCard, borderLeft: '5px solid #10B981'}}>
           <span style={styles.statLabel}>ACTIVE (USE)</span>
@@ -75,6 +74,17 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
         <div style={{...styles.statCard, borderLeft: '5px solid #EF4444'}}>
           <span style={styles.statLabel}>OBSOLETE</span>
           <span style={styles.statValue}>{stats.totalObsolete} <span style={{fontSize: '12px', fontWeight: 'normal'}}>WI</span></span>
+        </div>
+        
+        <div style={{...styles.statCard, borderLeft: '5px solid #3B82F6', minWidth: '250px'}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+             <span style={styles.statLabel}>STORAGE CAPACITY</span>
+             <HardDrive size={14} color="#3B82F6" />
+          </div>
+          <span style={styles.statValue}>{storageUsage} <span style={{fontSize: '12px', fontWeight: 'normal'}}>MB / {storageLimit}MB</span></span>
+          <div style={styles.progressContainer}>
+             <div style={{...styles.progressBar, width: `${storagePercent}%`, background: storagePercent > 80 ? '#EF4444' : '#3B82F6'}} />
+          </div>
         </div>
       </div>
 
@@ -85,7 +95,7 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
             <Search size={18} color="#94A3B8" />
             <input 
               style={styles.searchInput}
-              placeholder="Cari Mold / Part / Model..."
+              placeholder="Cari Mold / Part / Remarks..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -102,7 +112,6 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
             </select>
           </div>
 
-          {/* FITUR BARU: BUTTON EXCEL */}
           <button onClick={handleExportExcel} style={styles.btnExcel}>
             <Download size={18} /> Export Excel
           </button>
@@ -135,6 +144,8 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
               <th style={styles.th}>PART NUMBER</th>
               <th style={styles.th}>MOLD NO</th>
               <th style={styles.th}>MODEL</th>
+              {/* KOLOM REMARKS BARU */}
+              <th style={styles.th}>REMARKS</th>
               <th style={styles.th}>REV</th>
               <th style={styles.th}>STATUS</th>
               <th style={{...styles.th, textAlign: 'center'}}>ACTION</th>
@@ -148,6 +159,17 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
                 <td style={{...styles.td, fontWeight: '800'}}>{highlightText(wi.part_number, searchTerm)}</td>
                 <td style={styles.td}>{highlightText(wi.mold_number, searchTerm) || '-'}</td>
                 <td style={styles.td}>{highlightText(wi.model, searchTerm) || '-'}</td>
+                
+                {/* CELL REMARKS DENGAN TOOLTIP & TRUNCATE */}
+                <td style={styles.td}>
+                  <div 
+                    style={styles.remarksText} 
+                    title={wi.remarks || "No remarks"}
+                  >
+                    {highlightText(wi.remarks, searchTerm) || '-'}
+                  </div>
+                </td>
+
                 <td style={{...styles.td, textAlign: 'center'}}>{wi.revision_no}</td>
                 <td style={styles.td}>
                   <button 
@@ -174,7 +196,7 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
                 </td>
               </tr>
             )) : (
-              <tr><td colSpan="8" style={styles.emptyCell}>Data tidak ditemukan...</td></tr>
+              <tr><td colSpan="9" style={styles.emptyCell}>Data tidak ditemukan...</td></tr>
             )}
           </tbody>
         </table>
@@ -190,35 +212,45 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
 }
 
 const styles = {
-  // ... (Gunakan style mase yang lama, saya hanya tambah yang baru di bawah)
+  // ... style lainnya tetap sama ...
   container: { padding: '5px' },
-  statsRow: { display: 'flex', gap: '15px', marginBottom: '20px' },
-  statCard: { flex: 1, background: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' },
+  statsRow: { display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap' },
+  statCard: { flex: 1, background: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', minWidth: '180px' },
   statLabel: { fontSize: '11px', color: '#64748B', fontWeight: 'bold' },
   statValue: { fontSize: '24px', fontWeight: '900', color: '#1E293B' },
+  progressContainer: { width: '100%', height: '6px', background: '#F1F5F9', borderRadius: '10px', marginTop: '10px', overflow: 'hidden' },
+  progressBar: { height: '100%', transition: 'width 0.5s ease-in-out' },
   header: { marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' },
   actionWrapper: { display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' },
   searchWrapper: { display: 'flex', alignItems: 'center', background: 'white', padding: '0 10px', borderRadius: '8px', border: '1px solid #E2E8F0', width: '250px' },
   filterWrapper: { display: 'flex', alignItems: 'center', background: 'white', padding: '0 10px', borderRadius: '8px', border: '1px solid #E2E8F0' },
   searchInput: { border: 'none', outline: 'none', padding: '10px', fontSize: '13px', width: '100%' },
   selectInput: { border: 'none', outline: 'none', padding: '10px', fontSize: '13px', color: '#475569', background: 'transparent' },
-  
   btnExcel: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', background: '#475569', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' },
   btnAction: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' },
   btnAdd: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', background: '#10B981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' },
-
   tableContainer: { overflowX: 'auto', background: 'white', borderRadius: '12px', border: '1px solid #E2E8F0' },
-  table: { width: '100%', borderCollapse: 'collapse', minWidth: '900px' },
+  table: { width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }, // Naikkan minWidth sedikit
   theadRow: { background: '#F8FAFC', borderBottom: '2px solid #E2E8F0' },
   th: { padding: '12px 15px', fontSize: '11px', color: '#64748B', textAlign: 'left', fontWeight: 'bold' },
   tr: { borderBottom: '1px solid #F1F5F9' },
   td: { padding: '12px 15px', fontSize: '13px', color: '#334155' },
+  
+  // STYLE UNTUK REMARKS AGAR RAPI
+  remarksText: { 
+    maxWidth: '150px', 
+    fontSize: '11px', 
+    color: '#64748B', 
+    fontStyle: 'italic',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
+  },
 
   customerBadge: { background: '#F1F5F9', color: '#475569', padding: '3px 8px', borderRadius: '5px', fontSize: '11px', fontWeight: 'bold' },
   statusBtn: { border: 'none', background: 'none', padding: 0 },
   statusUse: { color: '#059669', background: '#DCFCE7', padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' },
   statusObsolete: { color: '#DC2626', background: '#FEE2E2', padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' },
-
   actionGroup: { display: 'flex', gap: '5px' },
   iconBtnOpen: { padding: '8px', background: '#F1F5F9', borderRadius: '8px', color: '#475569', display: 'flex', alignItems: 'center' },
   iconBtnEdit: { padding: '8px', background: '#EFF6FF', borderRadius: '8px', color: '#2563EB', border: 'none', cursor: 'pointer' },

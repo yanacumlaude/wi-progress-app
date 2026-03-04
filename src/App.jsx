@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import Sidebar from "./components/Sidebar";
-import { Menu, X, ShieldCheck, Upload, CheckCircle, FileText, Archive, Users, Lock } from "lucide-react";
+import { Menu, X, ShieldCheck, Upload, CheckCircle, FileText, Archive, Users, Lock, Clock } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react"; 
 
 import Dashboard from "./components/Dashboard";
 import WICenterLibrary from "./components/WICenterLibrary";
+import ActivityLog from "./components/ActivityLog"; 
 
 function App() {
   const [role, setRole] = useState("unauthenticated");
@@ -20,6 +21,8 @@ function App() {
   const [isModalEditWI, setIsModalEditWI] = useState(false);
   const [editingWI, setEditingWI] = useState(null);
 
+  const [storageUsage, setStorageUsage] = useState(0);
+
   const [newWI, setNewWI] = useState({
     customer: "", date_created: new Date().toISOString().split('T')[0], 
     part_number: "", mold_number: "", model: "", is_logo_updated: false, 
@@ -27,10 +30,16 @@ function App() {
     location: "", revision_no: "", file_url: "", process_name: "", is_archived: false 
   });
 
-  const writeLog = async (action, target) => {
+  const writeLog = async (action, target, details = "") => {
     try {
       await supabase.from('activity_logs').insert([
-        { user_name: userSession, action: action, target_item: target }
+        { 
+          user_name: userSession, 
+          action: action, 
+          target_item: target,
+          details: details, 
+          created_at: new Date().toISOString()
+        }
       ]);
       fetchLogs();
     } catch (err) { console.error("Log error:", err); }
@@ -38,11 +47,15 @@ function App() {
 
   const fetchData = async () => {
     const { data: wi } = await supabase.from('wi_data').select('*').order('id', { ascending: false });
-    setWiList(wi || []);
+    const list = wi || [];
+    setWiList(list);
+    
+    const estimatedSize = (list.filter(item => item.file_url).length * 0.7).toFixed(2);
+    setStorageUsage(estimatedSize);
   };
 
   const fetchLogs = async () => {
-    const { data: logData } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(20);
+    const { data: logData } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(100);
     setLogs(logData || []);
   };
 
@@ -65,28 +78,51 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleLogin = (e) => {
+  // --- UPGRADE LOGIN: CEK DATABASE (USER_ACCESS) ---
+  const handleLogin = async (e) => {
     e.preventDefault();
-    const divName = e.target.divisi.value.toLowerCase();
+    const divName = e.target.divisi.value; // Tidak perlu toLowerCase agar match case-sensitive jika perlu
     const password = e.target.password.value;
 
-    // Logic: Engineering (Admin) password eng123, Divisi lain password user123
-    if (divName.includes("engineering") && password === "eng123") {
-      setUserSession("Engineering");
-      setRole("admin");
-      setTimeout(() => writeLog("Login ke Sistem", "Portal Dashboard"), 500);
-    } else if (password === "user123") {
-      setUserSession(e.target.divisi.value);
-      setRole("user");
-      setTimeout(() => writeLog("Login ke Sistem", "Portal Dashboard"), 500);
-    } else {
-      alert("Nama Divisi atau Password Salah!");
+    try {
+      // Menanyakan ke brankas Supabase
+      const { data, error } = await supabase
+        .from('user_access')
+        .select('*')
+        .eq('username', divName)
+        .eq('password', password)
+        .single();
+
+      if (data) {
+        // Jika data ditemukan (Username & Password cocok)
+        setUserSession(data.username);
+        setRole(data.role);
+        
+        // Gunakan timeout agar state userSession ter-update dulu sebelum log ditulis
+        setTimeout(() => {
+            supabase.from('activity_logs').insert([{
+                user_name: data.username,
+                action: "LOGIN",
+                target_item: "Sistem Dashboard",
+                details: `${data.username} berhasil masuk ke sistem`,
+                created_at: new Date().toISOString()
+            }]).then(() => fetchLogs());
+        }, 500);
+
+      } else {
+        alert("Nama Divisi atau Password Salah, Puh!");
+      }
+
+      if (error) console.error("Login detail:", error.message);
+    } catch (err) {
+      alert("Gagal terhubung ke database!");
     }
   };
 
   const handleFileUpload = async (e, isEdit = false) => {
     const file = e.target.files[0];
     if (!file || file.type !== "application/pdf") return alert("Hanya PDF!");
+    if (file.size > 2 * 1024 * 1024) return alert("File terlalu besar (Max 2MB)!");
 
     try {
       setIsUploading(true);
@@ -107,7 +143,7 @@ function App() {
     const { error } = await supabase.from('wi_data').insert([newWI]);
     if (error) alert(error.message);
     else { 
-      await writeLog("Input Master WI Baru", newWI.part_number);
+      await writeLog("CREATE", newWI.part_number, `Input baru customer: ${newWI.customer}`);
       alert("Master WI Disimpan!"); 
       setIsModalInputWI(false); 
       setNewWI({ customer: "", date_created: new Date().toISOString().split('T')[0], part_number: "", mold_number: "", model: "", is_logo_updated: false, is_6_sisi: false, condition: "Bagus", remarks: "", status_oc: "O", location: "", revision_no: "", file_url: "", process_name: "", is_archived: false }); 
@@ -121,7 +157,8 @@ function App() {
 
     if (error) alert(error.message);
     else { 
-      await writeLog(editingWI.is_archived ? "Arsip WI (Obsolete)" : "Update Data WI", editingWI.part_number);
+      const actionType = editingWI.is_archived ? "ARCHIVE" : "UPDATE";
+      await writeLog(actionType, editingWI.part_number, `Remark: ${editingWI.remarks || 'No remarks'}`);
       alert("Berhasil Diperbarui!"); 
       setIsModalEditWI(false); 
       fetchData(); 
@@ -133,7 +170,7 @@ function App() {
     if (window.confirm("Yakin hapus permanen?")) {
       const { error } = await supabase.from('wi_data').delete().eq('id', id);
       if (!error) {
-        await writeLog("Hapus Permanen WI", item?.part_number);
+        await writeLog("DELETE", item?.part_number, "Dihapus permanen dari database");
         fetchData();
       }
     }
@@ -144,7 +181,15 @@ function App() {
       case "dashboard": return <Dashboard wiList={wiList} logs={logs} userSession={userSession} />;
       case "library": 
         const displayWI = role === 'admin' ? wiList : wiList.filter(item => !item.is_archived);
-        return <WICenterLibrary wiList={displayWI} role={role} onEdit={(wi) => { setEditingWI(wi); setIsModalEditWI(true); }} onOpenInputModal={() => setIsModalInputWI(true)} onDelete={handleDeleteWI} />;
+        return <WICenterLibrary 
+                  wiList={displayWI} 
+                  role={role} 
+                  storageUsage={storageUsage} 
+                  onEdit={(wi) => { setEditingWI(wi); setIsModalEditWI(true); }} 
+                  onOpenInputModal={() => setIsModalInputWI(true)} 
+                  onDelete={handleDeleteWI} 
+                />;
+      case "logs": return <ActivityLog logs={logs} />; 
       default: return <Dashboard wiList={wiList} logs={logs} />;
     }
   };
@@ -157,22 +202,17 @@ function App() {
             <ShieldCheck size={32} color="#10B981" />
           </div>
           <h2 style={{margin: '0 0 5px 0', color: '#1E293B', fontSize:'22px', fontWeight:'900'}}>WI HUB LOGIN</h2>
-          <p style={{margin: '0 0 25px 0', color: '#64748B', fontSize: '13px'}}>Masukan kredensial divisi anda</p>
-          
           <form onSubmit={handleLogin} style={{textAlign:'left', display:'flex', flexDirection:'column', gap:'15px'}}>
             <div>
               <label style={{fontSize:'12px', fontWeight:'bold', color:'#475569'}}>NAMA DIVISI / USER</label>
-              <input name="divisi" placeholder="Contoh: Quality Control" required style={{...modalStyles.input, marginTop:'5px'}} />
+              <input name="divisi" placeholder="Contoh: Engineering" required style={{...modalStyles.input, marginTop:'5px'}} />
             </div>
             <div>
               <label style={{fontSize:'12px', fontWeight:'bold', color:'#475569'}}>PASSWORD</label>
               <input name="password" type="password" placeholder="••••••••" required style={{...modalStyles.input, marginTop:'5px'}} />
             </div>
-            <button type="submit" style={uiStyles.loginBtnAdmin}>
-               Masuk ke Sistem
-            </button>
+            <button type="submit" style={uiStyles.loginBtnAdmin}>Masuk ke Sistem</button>
           </form>
-
           <div style={uiStyles.qrGeneralContainer}>
              <p style={{fontSize: '11px', fontWeight: 'bold', color: '#94A3B8', marginBottom: '10px'}}>QR AKSES CEPAT (VIEWER ONLY)</p>
              <div style={uiStyles.qrWrapper}>
@@ -207,7 +247,7 @@ function App() {
         {renderContent()}
       </main>
 
-      {/* MODAL INPUT WI (LENGKAP) */}
+      {/* --- MODAL INPUT WI --- */}
       {isModalInputWI && (
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, maxWidth: '600px'}}>
@@ -235,7 +275,7 @@ function App() {
               <div style={uploadStyles.container}>
                 <label style={uploadStyles.label}>
                   <div style={uploadStyles.inner}>
-                    {isUploading ? <span>Mengunggah...</span> : newWI.file_url ? <div style={{color: '#10B981'}}><CheckCircle size={18} /> PDF OK</div> : <div style={{color: '#64748B'}}><Upload size={18} /> Pilih PDF Dokumen</div>}
+                    {isUploading ? <span>Mengunggah...</span> : newWI.file_url ? <div style={{color: '#10B981'}}><CheckCircle size={18} /> PDF OK</div> : <div style={{color: '#64748B'}}><Upload size={18} /> Pilih PDF Dokumen (Max 2MB)</div>}
                   </div>
                   <input type="file" accept=".pdf" onChange={(e) => handleFileUpload(e, false)} style={{display: 'none'}} />
                 </label>
@@ -248,7 +288,7 @@ function App() {
         </div>
       )}
 
-      {/* MODAL EDIT WI (LENGKAP) */}
+      {/* --- MODAL EDIT WI --- */}
       {isModalEditWI && editingWI && (
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, maxWidth: '600px'}}>
@@ -270,7 +310,6 @@ function App() {
                 <input style={modalStyles.input} placeholder="Revisi" value={editingWI.revision_no} onChange={e=>setEditingWI({...editingWI, revision_no: e.target.value})}/>
               </div>
               <textarea style={{...modalStyles.input, height: '60px'}} placeholder="Remarks" value={editingWI.remarks} onChange={e=>setEditingWI({...editingWI, remarks: e.target.value})}/>
-              
               <div style={{display:'flex', alignItems:'center', gap:'10px', background:'#FEF2F2', padding:'12px', borderRadius:'12px', border:'1px solid #FECDD3'}}>
                  <input type="checkbox" id="archive-check" checked={editingWI.is_archived} onChange={e => setEditingWI({...editingWI, is_archived: e.target.checked})} style={{width: '18px', height: '18px'}} />
                  <label htmlFor="archive-check" style={{fontSize:'13px', color:'#991B1B', fontWeight:'bold'}}>Tandai sebagai OBSOLETE (Arsip)</label>
@@ -284,30 +323,8 @@ function App() {
   );
 }
 
-// --- STYLING SECTION ---
-const uploadStyles = { 
-  container: { border: '2px dashed #E2E8F0', borderRadius: '12px', padding: '10px', textAlign: 'center', cursor: 'pointer', background: '#F8FAFC' }, 
-  label: { cursor: 'pointer', display: 'block', width: '100%' }, 
-  inner: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40px', fontSize: '14px', fontWeight: '600' } 
-};
-
-const uiStyles = { 
-  loginOverlay: { height: '100vh', width: '100vw', background: '#F1F5F9', display: 'flex', justifyContent: 'center', alignItems: 'center' }, 
-  loginCard: { background: 'white', padding: '40px', borderRadius: '30px', textAlign: 'center', width: '90%', maxWidth: '420px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }, 
-  loginBtnAdmin: { width: '100%', padding: '15px', borderRadius: '12px', border: 'none', background: '#10B981', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: 'bold', fontSize: '15px', marginTop: '10px' }, 
-  mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)' }, 
-  sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000 }, 
-  qrGeneralContainer: { marginTop: '25px', paddingTop: '20px', borderTop: '1px dashed #E2E8F0' },
-  qrWrapper: { background: 'white', padding: '10px', borderRadius: '15px', display: 'inline-block', border: '1px solid #E2E8F0' }
-};
-
-const modalStyles = { 
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, backdropFilter: 'blur(4px)' }, 
-  content: { background: 'white', padding: '25px', borderRadius: '25px', width: '90%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }, 
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }, 
-  input: { padding: '12px 15px', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '14px', width: '100%', boxSizing: 'border-box', outline: 'none' }, 
-  btnSaveWI: { padding: '15px', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }, 
-  btnClose: { background: '#F1F5F9', border: 'none', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' } 
-};
+const uploadStyles = { container: { border: '2px dashed #E2E8F0', borderRadius: '12px', padding: '10px', textAlign: 'center', cursor: 'pointer', background: '#F8FAFC' }, label: { cursor: 'pointer', display: 'block', width: '100%' }, inner: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40px', fontSize: '14px', fontWeight: '600' } };
+const uiStyles = { loginOverlay: { height: '100vh', width: '100vw', background: '#F1F5F9', display: 'flex', justifyContent: 'center', alignItems: 'center' }, loginCard: { background: 'white', padding: '40px', borderRadius: '30px', textAlign: 'center', width: '90%', maxWidth: '420px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }, loginBtnAdmin: { width: '100%', padding: '15px', borderRadius: '12px', border: 'none', background: '#10B981', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: 'bold', fontSize: '15px', marginTop: '10px' }, mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)' }, sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000 }, qrGeneralContainer: { marginTop: '25px', paddingTop: '20px', borderTop: '1px dashed #E2E8F0' }, qrWrapper: { background: 'white', padding: '10px', borderRadius: '15px', display: 'inline-block', border: '1px solid #E2E8F0' } };
+const modalStyles = { overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, backdropFilter: 'blur(4px)' }, content: { background: 'white', padding: '25px', borderRadius: '25px', width: '90%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }, header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }, input: { padding: '12px 15px', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '14px', width: '100%', boxSizing: 'border-box', outline: 'none' }, btnSaveWI: { padding: '15px', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }, btnClose: { background: '#F1F5F9', border: 'none', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' } };
 
 export default App;
