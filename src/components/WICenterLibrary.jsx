@@ -18,7 +18,7 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
     totalObsolete: wiList.filter(wi => wi.is_archived).length
   };
 
-  const storageLimit = 50; 
+  const storageLimit = 1000; 
   const storagePercent = Math.min((storageUsage / storageLimit) * 100, 100);
 
   const filteredWI = wiList.filter((wi) => {
