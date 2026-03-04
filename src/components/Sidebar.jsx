@@ -1,183 +1,167 @@
 import React from "react";
-import { LayoutDashboard, BookOpen, ShieldCheck, LogOut, UserCircle, Clock } from "lucide-react"; // Tambah Clock icon
+import { 
+  LayoutDashboard, 
+  Library, 
+  History, 
+  LogOut, 
+  User as UserIcon,
+  ChevronRight
+} from "lucide-react";
 
-export default function Sidebar({ role, menu, setMenu, userSession }) {
-  // DINAMIS MENU: Tambahkan Logs hanya jika role === admin
-  const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
-    { id: "library", label: "WI Library", icon: <BookOpen size={20} /> },
-  ];
-
-  // Suntik menu logs jika admin
-  if (role === "admin") {
-    menuItems.push({ id: "logs", label: "System Logs", icon: <Clock size={20} /> });
-  }
-
-  return (
-    <div style={styles.sidebar}>
-      {/* BRAND SECTION */}
-      <div style={styles.brand}>
-        <div style={styles.logoBox}>
-          <ShieldCheck size={24} color="#10B981" />
-        </div>
-        <div style={styles.brandText}>
-          <span style={styles.mainTitle}>WI HUB</span>
-          <span style={styles.subTitle}>{role?.toUpperCase()} MODE</span>
-        </div>
-      </div>
-
-      {/* USER INFO SECTION */}
-      <div style={styles.userProfile}>
-        <div style={styles.avatarBox}>
-          <UserCircle size={32} color="#64748B" />
-        </div>
-        <div style={styles.userInfo}>
-          <span style={styles.userName}>{userSession || "Guest User"}</span>
-          <span style={styles.userStatus}>Online</span>
-        </div>
-      </div>
-
-      {/* NAVIGATION */}
-      <nav style={styles.nav}>
-        {menuItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setMenu(item.id)}
-            style={{
-              ...styles.navBtn,
-              backgroundColor: menu === item.id ? "#F1F5F9" : "transparent",
-              color: menu === item.id ? "#10B981" : "#64748B",
-              borderRight: menu === item.id ? "4px solid #10B981" : "none",
-            }}
-            className="sidebar-nav-item"
-          >
-            {item.icon}
-            <span style={{ fontWeight: menu === item.id ? "bold" : "500" }}>
-              {item.label}
-            </span>
-          </button>
-        ))}
-      </nav>
-
-      {/* FOOTER & LOGOUT */}
-      <div style={styles.footer}>
-        <button 
-          onClick={() => {
-            if(window.confirm("Yakin ingin keluar sistem?")) {
-              window.location.reload();
-            }
-          }} 
-          style={styles.logoutBtn}
-        >
-          <LogOut size={18} /> Keluar Sistem
-        </button>
-      </div>
-
-      {/* CSS IN JS UNTUK HOVER */}
-      <style>{`
-        .sidebar-nav-item:hover {
-          background-color: #F8FAFC !important;
-          color: #10B981 !important;
-          padding-left: 25px !important;
-          transition: all 0.3s ease;
-        }
-      `}</style>
-    </div>
-  );
-}
-
-const styles = {
-  sidebar: { 
-    display: "flex", 
-    flexDirection: "column", 
-    height: "100%", 
-    padding: "20px 0",
-    background: "white" 
-  },
-  brand: { 
-    padding: "0 20px 20px 20px", 
-    display: "flex", 
-    alignItems: "center", 
-    gap: "12px" 
-  },
-  logoBox: { 
-    background: "#ECFDF5", 
-    padding: "8px", 
-    borderRadius: "10px" 
-  },
-  brandText: { 
-    display: "flex", 
-    flexDirection: "column" 
-  },
-  mainTitle: { 
-    fontWeight: "900", 
-    fontSize: "18px", 
-    color: "#1E293B", 
-    letterSpacing: "1px" 
-  },
-  subTitle: { 
-    fontSize: "10px", 
-    color: "#94A3B8", 
-    fontWeight: "bold" 
-  },
-  userProfile: {
-    margin: "0 20px 20px 20px",
-    padding: "15px",
-    background: "#F8FAFC",
-    borderRadius: "15px",
+const Sidebar = ({ role, menu, setMenu, userSession }) => {
+  
+  // Fungsi helper untuk styling menu yang aktif
+  const getMenuItemStyle = (itemMenu) => ({
     display: "flex",
     alignItems: "center",
-    gap: "10px",
-    border: "1px solid #F1F5F9"
-  },
-  avatarBox: { display: "flex", alignItems: "center" },
-  userInfo: { display: "flex", flexDirection: "column", overflow: "hidden" },
-  userName: { 
-    fontSize: "13px", 
-    fontWeight: "bold", 
-    color: "#334155",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis"
-  },
-  userStatus: { fontSize: "10px", color: "#10B981", fontWeight: "bold" },
-  
-  nav: { 
-    flex: 1, 
-    display: "flex", 
-    flexDirection: "column", 
-    gap: "5px" 
-  },
-  navBtn: { 
-    display: "flex", 
-    alignItems: "center", 
-    gap: "12px", 
-    padding: "15px 20px", 
-    border: "none", 
-    cursor: "pointer", 
-    transition: "all 0.3s", 
-    textAlign: "left", 
-    width: "100%", 
-    fontSize: "14px",
-    background: "transparent"
-  },
-  footer: { 
-    padding: "20px", 
-    borderTop: "1px solid #F1F5F9" 
-  },
-  logoutBtn: { 
-    display: "flex", 
-    alignItems: "center", 
-    gap: "10px", 
-    width: "100%", 
-    padding: "12px", 
-    borderRadius: "10px", 
-    border: "1px solid #FEE2E2", 
-    background: "white", 
-    color: "#EF4444", 
-    fontWeight: "bold", 
-    cursor: "pointer", 
-    fontSize: "13px",
-    transition: "0.2s"
-  }
+    justifyContent: "space-between",
+    padding: "14px 18px",
+    margin: "4px 12px",
+    borderRadius: "12px",
+    cursor: "pointer",
+    transition: "all 0.3s ease",
+    textDecoration: "none",
+    backgroundColor: menu === itemMenu ? "#ECFDF5" : "transparent",
+    color: menu === itemMenu ? "#10B981" : "#64748B",
+    fontWeight: menu === itemMenu ? "700" : "500",
+  });
+
+  const handleLogout = () => {
+    if (window.confirm("Apakah Anda yakin ingin keluar?")) {
+      window.location.href = "/"; // Refresh ke halaman login
+    }
+  };
+
+  return (
+    <div style={sidebarContainer}>
+      {/* HEADER LAMA DIHAPUS KARENA SUDAH ADA DI APP.JSX */}
+
+      {/* NAVIGASI MENU */}
+      <nav style={{ flex: 1, marginTop: "10px" }}>
+        <div 
+          style={getMenuItemStyle("dashboard")} 
+          onClick={() => setMenu("dashboard")}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <LayoutDashboard size={20} />
+            <span>Dashboard</span>
+          </div>
+          {menu === "dashboard" && <ChevronRight size={14} />}
+        </div>
+
+        <div 
+          style={getMenuItemStyle("library")} 
+          onClick={() => setMenu("library")}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <Library size={20} />
+            <span>WI Library</span>
+          </div>
+          {menu === "library" && <ChevronRight size={14} />}
+        </div>
+
+        {role === "admin" && (
+          <div 
+            style={getMenuItemStyle("logs")} 
+            onClick={() => setMenu("logs")}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <History size={20} />
+              <span>Activity Logs</span>
+            </div>
+            {menu === "logs" && <ChevronRight size={14} />}
+          </div>
+        )}
+      </nav>
+
+      {/* FOOTER SIDEBAR: INFO USER & LOGOUT */}
+      <div style={sidebarFooter}>
+        <div style={userCard}>
+          <div style={avatarBox}>
+            <UserIcon size={18} color="#10B981" />
+          </div>
+          <div style={{ overflow: "hidden" }}>
+            <p style={userName}>{userSession || "Guest"}</p>
+            <p style={userRole}>{role?.toUpperCase()}</p>
+          </div>
+        </div>
+        
+        <button onClick={handleLogout} style={logoutBtn}>
+          <LogOut size={18} />
+          <span>Logout System</span>
+        </button>
+      </div>
+    </div>
+  );
 };
+
+// --- STYLES ---
+const sidebarContainer = {
+  display: "flex",
+  flexDirection: "column",
+  height: "calc(100% - 90px)", // Mengurangi tinggi header di App.jsx
+  backgroundColor: "#ffffff",
+};
+
+const sidebarFooter = {
+  padding: "20px",
+  borderTop: "1px solid #F1F5F9",
+  marginTop: "auto",
+};
+
+const userCard = {
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  padding: "12px",
+  backgroundColor: "#F8FAFC",
+  borderRadius: "14px",
+  marginBottom: "15px",
+};
+
+const avatarBox = {
+  width: "36px",
+  height: "36px",
+  borderRadius: "10px",
+  backgroundColor: "#ffffff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  boxShadow: "0 2px 5px rgba(0,0,0,0.05)",
+};
+
+const userName = {
+  margin: 0,
+  fontSize: "13px",
+  fontWeight: "700",
+  color: "#1E293B",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const userRole = {
+  margin: 0,
+  fontSize: "10px",
+  fontWeight: "600",
+  color: "#94A3B8",
+};
+
+const logoutBtn = {
+  width: "100%",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "10px",
+  padding: "12px",
+  borderRadius: "12px",
+  border: "1px solid #FEE2E2",
+  backgroundColor: "#FFF1F1",
+  color: "#EF4444",
+  fontSize: "13px",
+  fontWeight: "700",
+  cursor: "pointer",
+  transition: "0.2s",
+};
+
+export default Sidebar;

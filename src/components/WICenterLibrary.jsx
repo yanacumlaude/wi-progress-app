@@ -2,11 +2,11 @@ import React, { useState } from "react";
 import { 
   Search, ExternalLink, Plus, Trash2, 
   ArchiveRestore, Archive, Edit3, 
-  CheckCircle2, AlertCircle, Filter, Download, HardDrive 
+  CheckCircle2, AlertCircle, Filter, Download, HardDrive, Eye, Circle
 } from "lucide-react";
 import * as XLSX from 'xlsx';
 
-export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal, onDelete, storageUsage }) {
+export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal, onDelete, storageUsage, onPreview }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState("All");
   const [viewMode, setViewMode] = useState("active");
@@ -37,9 +37,12 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
       'Part Number': wi.part_number,
       'Mold Number': wi.mold_number,
       Model: wi.model,
-      Remarks: wi.remarks, // Tambahkan di export excel juga
+      Remarks: wi.remarks,
       Revision: wi.revision_no,
-      Status: wi.is_archived ? 'OBSOLETE' : 'USE'
+      Status: wi.is_archived ? 'OBSOLETE' : 'USE',
+      'Verified Eng': wi.is_verified_eng ? 'YES' : 'NO',
+      'Verified QC': wi.is_verified_qc ? 'YES' : 'NO',
+      'Verified Prod': wi.is_verified_prod ? 'YES' : 'NO'
     }));
     
     const ws = XLSX.utils.json_to_sheet(dataToExport);
@@ -141,10 +144,9 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
             <tr style={styles.theadRow}>
               <th style={styles.th}>CUSTOMER</th>
               <th style={styles.th}>PROCESS</th>
-              <th style={styles.th}>PART NUMBER</th>
+              <th style={styles.th}>PART NUMBER / VERIFICATION</th>
               <th style={styles.th}>MOLD NO</th>
               <th style={styles.th}>MODEL</th>
-              {/* KOLOM REMARKS BARU */}
               <th style={styles.th}>REMARKS</th>
               <th style={styles.th}>REV</th>
               <th style={styles.th}>STATUS</th>
@@ -156,21 +158,42 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
               <tr key={wi.id} style={styles.tr} className="table-row-hover">
                 <td style={styles.td}><span style={styles.customerBadge}>{highlightText(wi.customer, searchTerm)}</span></td>
                 <td style={styles.td}>{highlightText(wi.process_name, searchTerm)}</td>
-                <td style={{...styles.td, fontWeight: '800'}}>{highlightText(wi.part_number, searchTerm)}</td>
-                <td style={styles.td}>{highlightText(wi.mold_number, searchTerm) || '-'}</td>
+                <td style={{...styles.td}}>
+                  <div style={{fontWeight: '800', marginBottom: '6px', color: '#1E293B', letterSpacing: '0.3px'}}>{highlightText(wi.part_number, searchTerm)}</div>
+                  
+                  {/* --- VERIFICATION AREA (DICAKEPIN LAGI) --- */}
+                  <div style={{display: 'flex', gap: '4px'}}>
+                    {['eng', 'qc', 'prod'].map(dept => {
+                      const isVerif = wi[`is_verified_${dept}`];
+                      return (
+                        <div key={dept} 
+                             style={{...styles.verifBadge, 
+                                     color: isVerif ? '#059669' : '#94A3B8',
+                                     background: isVerif ? '#ECFDF5' : '#F8FAFC',
+                                     borderColor: isVerif ? '#10B981' : '#E2E8F0'}} 
+                             title={`${dept.toUpperCase()} ${isVerif ? 'Verified' : 'Pending'}`}>
+                          {isVerif ? <CheckCircle2 size={10} strokeWidth={3} /> : <Circle size={10} strokeWidth={3} />}
+                          {dept.toUpperCase()}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </td>
+                
+                {/* KOLOM MOLD & MODEL TETAP AMAN */}
+                <td style={{...styles.td, fontWeight: '600'}}>{highlightText(wi.mold_number, searchTerm) || '-'}</td>
                 <td style={styles.td}>{highlightText(wi.model, searchTerm) || '-'}</td>
                 
-                {/* CELL REMARKS DENGAN TOOLTIP & TRUNCATE */}
                 <td style={styles.td}>
-                  <div 
-                    style={styles.remarksText} 
-                    title={wi.remarks || "No remarks"}
-                  >
+                  <div style={styles.remarksText} title={wi.remarks || "No remarks"}>
                     {highlightText(wi.remarks, searchTerm) || '-'}
                   </div>
                 </td>
 
-                <td style={{...styles.td, textAlign: 'center'}}>{wi.revision_no}</td>
+                <td style={{...styles.td, textAlign: 'center', fontWeight: 'bold'}}>
+                    <div style={{background: '#F1F5F9', borderRadius: '6px', padding: '2px 0'}}>{wi.revision_no}</div>
+                </td>
+                
                 <td style={styles.td}>
                   <button 
                     onClick={() => role === 'admin' && onEdit({...wi, is_archived: !wi.is_archived})} 
@@ -185,11 +208,12 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
                 </td>
                 <td style={styles.td}>
                   <div style={styles.actionGroup}>
-                    <a href={wi.file_url} target="_blank" rel="noreferrer" style={styles.iconBtnOpen}><ExternalLink size={16} /></a>
+                    <button onClick={() => onPreview(wi.file_url)} style={styles.iconBtnPreview} title="Quick Preview"><Eye size={16} /></button>
+                    <a href={wi.file_url} target="_blank" rel="noreferrer" style={styles.iconBtnOpen} title="Open in New Tab"><ExternalLink size={16} /></a>
                     {role === 'admin' && (
                       <>
-                        <button onClick={() => onEdit(wi)} style={styles.iconBtnEdit}><Edit3 size={16} /></button>
-                        <button onClick={() => onDelete(wi.id)} style={styles.iconBtnDelete}><Trash2 size={16} /></button>
+                        <button onClick={() => onEdit(wi)} style={styles.iconBtnEdit} title="Edit Data"><Edit3 size={16} /></button>
+                        <button onClick={() => onDelete(wi.id, wi.file_url)} style={styles.iconBtnDelete} title="Delete Forever"><Trash2 size={16} /></button>
                       </>
                     )}
                   </div>
@@ -212,7 +236,6 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
 }
 
 const styles = {
-  // ... style lainnya tetap sama ...
   container: { padding: '5px' },
   statsRow: { display: 'flex', gap: '15px', marginBottom: '20px', flexWrap: 'wrap' },
   statCard: { flex: 1, background: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', minWidth: '180px' },
@@ -230,13 +253,12 @@ const styles = {
   btnAction: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' },
   btnAdd: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', background: '#10B981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' },
   tableContainer: { overflowX: 'auto', background: 'white', borderRadius: '12px', border: '1px solid #E2E8F0' },
-  table: { width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }, // Naikkan minWidth sedikit
+  table: { width: '100%', borderCollapse: 'collapse', minWidth: '1100px' },
   theadRow: { background: '#F8FAFC', borderBottom: '2px solid #E2E8F0' },
   th: { padding: '12px 15px', fontSize: '11px', color: '#64748B', textAlign: 'left', fontWeight: 'bold' },
   tr: { borderBottom: '1px solid #F1F5F9' },
   td: { padding: '12px 15px', fontSize: '13px', color: '#334155' },
   
-  // STYLE UNTUK REMARKS AGAR RAPI
   remarksText: { 
     maxWidth: '150px', 
     fontSize: '11px', 
@@ -247,12 +269,25 @@ const styles = {
     textOverflow: 'ellipsis'
   },
 
+  verifBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px',
+    fontSize: '9px',
+    fontWeight: '900',
+    padding: '2px 6px',
+    borderRadius: '6px',
+    border: '1px solid',
+    transition: 'all 0.2s ease'
+  },
+
   customerBadge: { background: '#F1F5F9', color: '#475569', padding: '3px 8px', borderRadius: '5px', fontSize: '11px', fontWeight: 'bold' },
   statusBtn: { border: 'none', background: 'none', padding: 0 },
   statusUse: { color: '#059669', background: '#DCFCE7', padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' },
   statusObsolete: { color: '#DC2626', background: '#FEE2E2', padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' },
   actionGroup: { display: 'flex', gap: '5px' },
-  iconBtnOpen: { padding: '8px', background: '#F1F5F9', borderRadius: '8px', color: '#475569', display: 'flex', alignItems: 'center' },
+  iconBtnPreview: { padding: '8px', background: '#F0F9FF', borderRadius: '8px', color: '#0EA5E9', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' },
+  iconBtnOpen: { padding: '8px', background: '#F1F5F9', borderRadius: '8px', color: '#475569', display: 'flex', alignItems: 'center', textDecoration: 'none' },
   iconBtnEdit: { padding: '8px', background: '#EFF6FF', borderRadius: '8px', color: '#2563EB', border: 'none', cursor: 'pointer' },
   iconBtnDelete: { padding: '8px', background: '#FEF2F2', borderRadius: '8px', color: '#DC2626', border: 'none', cursor: 'pointer' },
   emptyCell: { textAlign: 'center', padding: '40px', color: '#94A3B8' }

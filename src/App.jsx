@@ -1,7 +1,11 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import Sidebar from "./components/Sidebar";
-import { Menu, X, ShieldCheck, Upload, CheckCircle, FileText, Archive, Users, Lock, Clock, Eye } from "lucide-react";
+import { 
+  Menu, X, ShieldCheck, Upload, CheckCircle, 
+  FileText, CheckCircle2, ShieldAlert, BookOpen, 
+  Lock, ArrowRight, User
+} from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react"; 
 
 import Dashboard from "./components/Dashboard";
@@ -21,20 +25,34 @@ function App() {
   const [isModalEditWI, setIsModalEditWI] = useState(false);
   const [editingWI, setEditingWI] = useState(null);
 
-  // State Baru untuk Preview PDF
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
 
   const [storageUsage, setStorageUsage] = useState(0);
 
-  const [newWI, setNewWI] = useState({
-    customer: "", date_created: new Date().toISOString().split('T')[0], 
-    part_number: "", mold_number: "", model: "", is_logo_updated: false, 
-    is_6_sisi: false, condition: "Bagus", remarks: "", status_oc: "O", 
-    location: "", revision_no: "", file_url: "", process_name: "", is_archived: false 
-  });
+  const initialWIState = {
+    customer: "", 
+    date_created: new Date().toISOString().split('T')[0], 
+    part_number: "", 
+    mold_number: "", 
+    model: "", 
+    is_logo_updated: false, 
+    is_6_sisi: false, 
+    condition: "Bagus", 
+    remarks: "", 
+    status_oc: "O", 
+    location: "", 
+    revision_no: "", 
+    file_url: "", 
+    process_name: "", 
+    is_archived: false,
+    is_verified_eng: true, 
+    is_verified_qc: false, 
+    is_verified_prod: false 
+  };
 
-  // --- REPAIR: writeLog lebih aman (Anti-Error 400) ---
+  const [newWI, setNewWI] = useState(initialWIState);
+
   const writeLog = async (action, target, details = "") => {
     try {
       const { error } = await supabase.from('activity_logs').insert([
@@ -55,7 +73,6 @@ function App() {
     const { data: wi } = await supabase.from('wi_data').select('*').order('id', { ascending: false });
     const list = wi || [];
     setWiList(list);
-    
     const estimatedSize = (list.filter(item => item.file_url).length * 0.7).toFixed(2);
     setStorageUsage(estimatedSize);
   };
@@ -90,41 +107,21 @@ function App() {
     const password = e.target.password.value;
 
     try {
-      const { data, error } = await supabase
-        .from('user_access')
-        .select('*')
-        .eq('username', divName)
-        .eq('password', password)
-        .single();
-
+      const { data } = await supabase.from('user_access').select('*').eq('username', divName).eq('password', password).single();
       if (data) {
         setUserSession(data.username);
         setRole(data.role);
-        
-        setTimeout(() => {
-            supabase.from('activity_logs').insert([{
-                user_name: data.username,
-                action: "LOGIN",
-                target_item: "Sistem Dashboard",
-                details: `${data.username} berhasil masuk ke sistem`,
-                created_at: new Date().toISOString()
-            }]).then(() => fetchLogs());
-        }, 500);
-
+        writeLog("LOGIN", "Sistem Dashboard", `${data.username} masuk`);
       } else {
-        alert("Nama Divisi atau Password Salah, Puh!");
+        alert("Nama Divisi atau Password Salah!");
       }
-
-      if (error) console.error("Login detail:", error.message);
-    } catch (err) {
-      alert("Gagal terhubung ke database!");
-    }
+    } catch (err) { alert("Gagal terhubung ke database!"); }
   };
 
   const handleFileUpload = async (e, isEdit = false) => {
     const file = e.target.files[0];
     if (!file || file.type !== "application/pdf") return alert("Hanya PDF!");
-    if (file.size > 2 * 1024 * 1024) return alert("File terlalu besar (Max 2MB)!");
+    if (file.size > 2 * 1024 * 1024) return alert("Maksimal 2MB!");
 
     try {
       setIsUploading(true);
@@ -142,25 +139,27 @@ function App() {
 
   const handleSaveWI = async (e) => {
     e.preventDefault();
-    const { error } = await supabase.from('wi_data').insert([newWI]);
-    if (error) alert(error.message);
-    else { 
-      await writeLog("CREATE", newWI.part_number, `Input baru customer: ${newWI.customer}`);
-      alert("Master WI Disimpan!"); 
+    if (!newWI.remarks || newWI.remarks.length < 5) return alert("Remarks (Alasan) wajib diisi!");
+
+    try {
+      await supabase.from('wi_data').update({ is_archived: true }).eq('part_number', newWI.part_number).eq('is_archived', false);
+      const { error } = await supabase.from('wi_data').insert([newWI]);
+      if (error) throw error;
+
+      await writeLog("CREATE", newWI.part_number, `New Rev: ${newWI.revision_no}`);
+      alert("Master WI Berhasil Disimpan!"); 
       setIsModalInputWI(false); 
-      setNewWI({ customer: "", date_created: new Date().toISOString().split('T')[0], part_number: "", mold_number: "", model: "", is_logo_updated: false, is_6_sisi: false, condition: "Bagus", remarks: "", status_oc: "O", location: "", revision_no: "", file_url: "", process_name: "", is_archived: false }); 
+      setNewWI(initialWIState); 
       fetchData(); 
-    }
+    } catch (err) { alert("Error: " + err.message); }
   };
 
   const handleUpdateWI = async (e) => {
     e.preventDefault();
     const { error } = await supabase.from('wi_data').update(editingWI).eq('id', editingWI.id);
-
     if (error) alert(error.message);
     else { 
-      const actionType = editingWI.is_archived ? "ARCHIVE" : "UPDATE";
-      await writeLog(actionType, editingWI.part_number, `Remark: ${editingWI.remarks || 'No remarks'}`);
+      await writeLog("UPDATE", editingWI.part_number, "Data updated");
       alert("Berhasil Diperbarui!"); 
       setIsModalEditWI(false); 
       fetchData(); 
@@ -169,33 +168,19 @@ function App() {
 
   const handleDeleteWI = async (id, fileUrl) => {
     const item = wiList.find(i => i.id === id);
-    if (!item) return;
-
-    if (window.confirm(`Yakin hapus permanen WI: ${item.part_number}? File di storage juga akan dihapus.`)) {
+    if (window.confirm(`Hapus permanen ${item?.part_number}?`)) {
       try {
         if (fileUrl) {
           const fileName = fileUrl.split('/').pop(); 
-          const { error: storageError } = await supabase
-            .storage
-            .from('wi-files')
-            .remove([`wi_documents/${fileName}`]);
-
-          if (storageError) console.warn("Storage warning:", storageError.message);
+          await supabase.storage.from('wi-files').remove([`wi_documents/${fileName}`]);
         }
-
-        const { error } = await supabase.from('wi_data').delete().eq('id', id);
-        if (!error) {
-          await writeLog("DELETE", item.part_number, "Dihapus permanen (Data & File)");
-          alert("Data dan File fisik berhasil dihapus!");
-          fetchData();
-        } else {
-          throw error;
-        }
-      } catch (err) { alert("Gagal menghapus: " + err.message); }
+        await supabase.from('wi_data').delete().eq('id', id);
+        await writeLog("DELETE", item?.part_number, "Deleted from system");
+        fetchData();
+      } catch (err) { alert("Gagal hapus!"); }
     }
   };
 
-  // Fungsi Baru: Buka Preview
   const handleOpenPreview = (url) => {
     setPreviewUrl(url);
     setIsPreviewOpen(true);
@@ -205,45 +190,48 @@ function App() {
     switch (menu) {
       case "dashboard": return <Dashboard wiList={wiList} logs={logs} userSession={userSession} />;
       case "library": 
-        const displayWI = role === 'admin' ? wiList : wiList.filter(item => !item.is_archived);
-        return <WICenterLibrary 
-                  wiList={displayWI} 
-                  role={role} 
-                  storageUsage={storageUsage} 
-                  onEdit={(wi) => { setEditingWI(wi); setIsModalEditWI(true); }} 
-                  onOpenInputModal={() => setIsModalInputWI(true)} 
-                  onDelete={(id, url) => handleDeleteWI(id, url)}
-                  onPreview={handleOpenPreview} // Mengirim fungsi preview
-                />;
+        const displayWI = role === 'admin' 
+          ? wiList 
+          : wiList.filter(item => !item.is_archived && item.is_verified_eng && item.is_verified_qc && item.is_verified_prod);
+        return <WICenterLibrary wiList={displayWI} role={role} storageUsage={storageUsage} onEdit={(wi) => { setEditingWI(wi); setIsModalEditWI(true); }} onOpenInputModal={() => setIsModalInputWI(true)} onDelete={handleDeleteWI} onPreview={handleOpenPreview} />;
       case "logs": return <ActivityLog logs={logs} />; 
       default: return <Dashboard wiList={wiList} logs={logs} />;
     }
   };
 
+  // --- UI LOGIN NIBOOK (EYE CATCHING) ---
   if (role === "unauthenticated") {
     return (
       <div style={uiStyles.loginOverlay}>
         <div style={uiStyles.loginCard}>
-          <div style={{background: '#ECFDF5', width:'60px', height:'60px', borderRadius:'15px', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 20px auto'}}>
-            <ShieldCheck size={32} color="#10B981" />
+          <div style={uiStyles.loginHeader}>
+            <div style={uiStyles.logoBox}>
+              <BookOpen size={40} color="#ffffff" strokeWidth={2.5} />
+            </div>
+            <h1 style={uiStyles.loginTitle}>NiBook</h1>
+            <p style={uiStyles.loginSubtitle}>Work Instruction Management Hub</p>
+            <p style={uiStyles.loginSlogan}>All for dreams</p>
           </div>
-          <h2 style={{margin: '0 0 5px 0', color: '#1E293B', fontSize:'22px', fontWeight:'900'}}>WI HUB LOGIN</h2>
-          <form onSubmit={handleLogin} style={{textAlign:'left', display:'flex', flexDirection:'column', gap:'15px'}}>
-            <div>
-              <label style={{fontSize:'12px', fontWeight:'bold', color:'#475569'}}>NAMA DIVISI / USER</label>
-              <input name="divisi" placeholder="Contoh: Engineering" required style={{...modalStyles.input, marginTop:'5px'}} />
+
+          <form onSubmit={handleLogin} style={uiStyles.loginForm}>
+            <div style={uiStyles.inputWrapper}>
+               <User size={18} color="#94A3B8" />
+               <input name="divisi" placeholder="Username / Division" required style={uiStyles.loginInput} />
             </div>
-            <div>
-              <label style={{fontSize:'12px', fontWeight:'bold', color:'#475569'}}>PASSWORD</label>
-              <input name="password" type="password" placeholder="••••••••" required style={{...modalStyles.input, marginTop:'5px'}} />
+            <div style={uiStyles.inputWrapper}>
+               <Lock size={18} color="#94A3B8" />
+               <input name="password" type="password" placeholder="Password" required style={uiStyles.loginInput} />
             </div>
-            <button type="submit" style={uiStyles.loginBtnAdmin}>Masuk ke Sistem</button>
+            <button type="submit" style={uiStyles.loginBtnAdmin}>
+              Sign In <ArrowRight size={18} />
+            </button>
           </form>
+
           <div style={uiStyles.qrGeneralContainer}>
-             <p style={{fontSize: '11px', fontWeight: 'bold', color: '#94A3B8', marginBottom: '10px'}}>QR AKSES CEPAT (VIEWER ONLY)</p>
-             <div style={uiStyles.qrWrapper}>
-                <QRCodeCanvas value={`${window.location.origin}?mode=library`} size={100} />
-             </div>
+              <div style={uiStyles.qrBox}>
+                <QRCodeCanvas value={`${window.location.origin}?mode=library`} size={90} />
+              </div>
+              <p style={{fontSize: '11px', color: '#94A3B8', marginTop: '12px', fontWeight: '600'}}>SCAN FOR GUEST ACCESS</p>
           </div>
         </div>
       </div>
@@ -258,57 +246,80 @@ function App() {
 
       {isSidebarOpen && window.innerWidth < 768 && <div onClick={() => setIsSidebarOpen(false)} style={uiStyles.sidebarOverlay} />}
 
-      <div style={{ 
-        width: isSidebarOpen ? '260px' : '0', transition: '0.3s', position: 'fixed', height: '100vh', zIndex: 3000,
-        overflow: 'hidden', background: 'white', borderRight: '1px solid #E2E8F0'
-      }}>
+      {/* --- SIDEBAR DENGAN BRANDING NIBOOK --- */}
+      <div style={{ width: isSidebarOpen ? '260px' : '0', transition: '0.4s cubic-bezier(0.4, 0, 0.2, 1)', position: 'fixed', height: '100vh', zIndex: 3000, overflow: 'hidden', background: '#ffffff', borderRight: '1px solid #E2E8F0', boxShadow: '10px 0 30px rgba(0,0,0,0.02)' }}>
+        
+        {/* SIDEBAR HEADER BRANDING */}
+        <div style={uiStyles.sidebarHeader}>
+           <div style={uiStyles.sidebarLogoBox}>
+             <BookOpen size={22} color="#ffffff" strokeWidth={3} />
+           </div>
+           <div style={{display:'flex', flexDirection:'column'}}>
+             <span style={uiStyles.sidebarBrandName}>NiBook</span>
+             <span style={uiStyles.sidebarBrandSlogan}>All for dreams</span>
+           </div>
+        </div>
+
         <Sidebar role={role} menu={menu} setMenu={(m) => { setMenu(m); if(window.innerWidth < 768) setIsSidebarOpen(false); }} userSession={userSession} />
       </div>
       
-      <main style={{ 
-        flex: 1, padding: window.innerWidth < 768 ? '20px 15px' : '30px', 
-        marginLeft: isSidebarOpen && window.innerWidth > 768 ? '260px' : '0', 
-        transition: '0.3s', width: '100%'
-      }}>
+      <main style={{ flex: 1, padding: window.innerWidth < 768 ? '20px 15px' : '30px', marginLeft: isSidebarOpen && window.innerWidth > 768 ? '260px' : '0', transition: '0.4s cubic-bezier(0.4, 0, 0.2, 1)', width: '100%' }}>
         {renderContent()}
       </main>
 
       {/* --- MODAL INPUT WI --- */}
       {isModalInputWI && (
         <div style={modalStyles.overlay}>
-          <div style={{...modalStyles.content, maxWidth: '600px'}}>
+          <div style={{...modalStyles.content, maxWidth: '650px'}}>
             <div style={modalStyles.header}>
-              <h3 style={{margin:0}}>Input Master WI Baru</h3>
+              <h3 style={{margin:0}}>Tambah Master WI Baru</h3>
               <button onClick={() => setIsModalInputWI(false)} style={modalStyles.btnClose}>×</button>
             </div>
             <form onSubmit={handleSaveWI} style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-                <input style={modalStyles.input} placeholder="Customer" value={newWI.customer} onChange={e=>setNewWI({...newWI, customer: e.target.value})}/>
-                <input style={modalStyles.input} placeholder="Nama Proses" value={newWI.process_name} onChange={e=>setNewWI({...newWI, process_name: e.target.value})}/>
+              
+              <div style={grid2}>
+                <div><label style={labelS}>CUSTOMER</label><input style={modalStyles.input} placeholder="Nama Customer" required value={newWI.customer} onChange={e=>setNewWI({...newWI, customer: e.target.value})}/></div>
+                <div><label style={labelS}>PROSES</label><input style={modalStyles.input} placeholder="Injection / Assy" required value={newWI.process_name} onChange={e=>setNewWI({...newWI, process_name: e.target.value})}/></div>
               </div>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-                <input style={modalStyles.input} placeholder="Part Number" required value={newWI.part_number} onChange={e=>setNewWI({...newWI, part_number: e.target.value})}/>
-                <input style={modalStyles.input} placeholder="Mold Number" value={newWI.mold_number} onChange={e=>setNewWI({...newWI, mold_number: e.target.value})}/>
+
+              <div style={grid2}>
+                <div><label style={labelS}>PART NUMBER</label><input style={modalStyles.input} placeholder="P/N" required value={newWI.part_number} onChange={e=>setNewWI({...newWI, part_number: e.target.value})}/></div>
+                <div><label style={labelS}>MOLD NUMBER</label><input style={modalStyles.input} placeholder="M/N" required value={newWI.mold_number} onChange={e=>setNewWI({...newWI, mold_number: e.target.value})}/></div>
               </div>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-                <input style={modalStyles.input} placeholder="Model" value={newWI.model} onChange={e=>setNewWI({...newWI, model: e.target.value})}/>
-                <input style={modalStyles.input} placeholder="Lokasi Simpan" value={newWI.location} onChange={e=>setNewWI({...newWI, location: e.target.value})}/>
+
+              <div style={grid2}>
+                <div><label style={labelS}>MODEL</label><input style={modalStyles.input} placeholder="Nama Model" required value={newWI.model} onChange={e=>setNewWI({...newWI, model: e.target.value})}/></div>
+                <div><label style={labelS}>REVISI KE-</label><input style={modalStyles.input} placeholder="01" required value={newWI.revision_no} onChange={e=>setNewWI({...newWI, revision_no: e.target.value})}/></div>
               </div>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-                <input style={modalStyles.input} placeholder="Revisi Ke-" value={newWI.revision_no} onChange={e=>setNewWI({...newWI, revision_no: e.target.value})}/>
-                <input style={modalStyles.input} placeholder="Remarks / Catatan" value={newWI.remarks} onChange={e=>setNewWI({...newWI, remarks: e.target.value})}/>
+
+              <div style={verifContainer}>
+                <p style={{fontSize: '11px', fontWeight: '800', color: '#475569', marginBottom: '10px'}}>PHYSICAL VERIFICATION CHECKLIST</p>
+                <div style={{display: 'flex', gap: '8px'}}>
+                  {['eng', 'qc', 'prod'].map(dept => (
+                    <label key={dept} style={{...uiStyles.verifCard, 
+                      borderColor: newWI[`is_verified_${dept}`] ? '#10B981' : '#E2E8F0',
+                      background: newWI[`is_verified_${dept}`] ? '#F0FDF4' : 'white'
+                    }}>
+                      <input type="checkbox" checked={newWI[`is_verified_${dept}`]} onChange={e=>setNewWI({...newWI, [`is_verified_${dept}`]: e.target.checked})} style={{display:'none'}} />
+                      {newWI[`is_verified_${dept}`] ? <CheckCircle2 size={16} color="#10B981" /> : <div style={uiStyles.emptyCircle} />}
+                      <span style={{color: newWI[`is_verified_${dept}`] ? '#065F46' : '#64748B'}}>{dept.toUpperCase()}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
+
+              <div><label style={labelS}>REMARKS (ALASAN REVISI)</label><textarea style={{...modalStyles.input, height: '60px'}} placeholder="Wajib diisi..." required value={newWI.remarks} onChange={e=>setNewWI({...newWI, remarks: e.target.value})}/></div>
+
               <div style={uploadStyles.container}>
                 <label style={uploadStyles.label}>
                   <div style={uploadStyles.inner}>
-                    {isUploading ? <span>Mengunggah...</span> : newWI.file_url ? <div style={{color: '#10B981'}}><CheckCircle size={18} /> PDF OK</div> : <div style={{color: '#64748B'}}><Upload size={18} /> Pilih PDF Dokumen (Max 2MB)</div>}
+                    {isUploading ? <span>Mengunggah...</span> : newWI.file_url ? <div style={{color: '#10B981'}}><CheckCircle size={18} /> FILE PDF READY</div> : <div><Upload size={18} /> Upload WI (PDF)</div>}
                   </div>
                   <input type="file" accept=".pdf" onChange={(e) => handleFileUpload(e, false)} style={{display: 'none'}} />
                 </label>
               </div>
-              <button type="submit" disabled={isUploading || !newWI.file_url} style={{...modalStyles.btnSaveWI, background: (isUploading || !newWI.file_url) ? '#CBD5E1' : '#10B981'}}>
-                Simpan Master WI
-              </button>
+
+              <button type="submit" disabled={isUploading || !newWI.file_url} style={{...modalStyles.btnSaveWI, background: (isUploading || !newWI.file_url) ? '#CBD5E1' : '#10B981'}}>Aktifkan Master WI</button>
             </form>
           </div>
         </div>
@@ -319,49 +330,49 @@ function App() {
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, maxWidth: '600px'}}>
             <div style={modalStyles.header}>
-              <h3 style={{margin:0}}>Edit Data WI</h3>
+              <h3>Update & Verifikasi</h3>
               <button onClick={() => setIsModalEditWI(false)} style={modalStyles.btnClose}>×</button>
             </div>
             <form onSubmit={handleUpdateWI} style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-                <input style={modalStyles.input} placeholder="Customer" value={editingWI.customer} onChange={e=>setEditingWI({...editingWI, customer: e.target.value})}/>
-                <input style={modalStyles.input} placeholder="Proses" value={editingWI.process_name} onChange={e=>setEditingWI({...editingWI, process_name: e.target.value})}/>
+              <div style={grid2}>
+                <input style={modalStyles.input} value={editingWI.customer} onChange={e=>setEditingWI({...editingWI, customer: e.target.value})}/>
+                <input style={modalStyles.input} value={editingWI.process_name} onChange={e=>setEditingWI({...editingWI, process_name: e.target.value})}/>
               </div>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-                <input style={modalStyles.input} placeholder="Part Number" value={editingWI.part_number} onChange={e=>setEditingWI({...editingWI, part_number: e.target.value})}/>
-                <input style={modalStyles.input} placeholder="Mold Number" value={editingWI.mold_number} onChange={e=>setEditingWI({...editingWI, mold_number: e.target.value})}/>
+              <div style={verifContainer}>
+                <div style={{display: 'flex', gap: '8px'}}>
+                  {['eng', 'qc', 'prod'].map(dept => (
+                    <label key={dept} style={{...uiStyles.verifCard, 
+                      borderColor: editingWI[`is_verified_${dept}`] ? '#10B981' : '#E2E8F0',
+                      background: editingWI[`is_verified_${dept}`] ? '#F0FDF4' : 'white',
+                      flex: 1
+                    }}>
+                      <input type="checkbox" checked={editingWI[`is_verified_${dept}`]} onChange={e=>setEditingWI({...editingWI, [`is_verified_${dept}`]: e.target.checked})} style={{display:'none'}} />
+                      {editingWI[`is_verified_${dept}`] ? <CheckCircle2 size={16} color="#10B981" /> : <div style={uiStyles.emptyCircle} />}
+                      <span>{dept.toUpperCase()}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-                <input style={modalStyles.input} placeholder="Lokasi" value={editingWI.location} onChange={e=>setEditingWI({...editingWI, location: e.target.value})}/>
-                <input style={modalStyles.input} placeholder="Revisi" value={editingWI.revision_no} onChange={e=>setEditingWI({...editingWI, revision_no: e.target.value})}/>
+              <textarea style={modalStyles.input} value={editingWI.remarks} onChange={e=>setEditingWI({...editingWI, remarks: e.target.value})}/>
+              <div style={{display:'flex', alignItems:'center', gap:'10px', background:'#FEF2F2', padding:'12px', borderRadius:'12px'}}>
+                 <input type="checkbox" checked={editingWI.is_archived} onChange={e => setEditingWI({...editingWI, is_archived: e.target.checked})} />
+                 <label style={{fontSize:'13px', color:'#991B1B', fontWeight:'bold'}}>SET AS OBSOLETE (ARCHIVE)</label>
               </div>
-              <textarea style={{...modalStyles.input, height: '60px'}} placeholder="Remarks" value={editingWI.remarks} onChange={e=>setEditingWI({...editingWI, remarks: e.target.value})}/>
-              <div style={{display:'flex', alignItems:'center', gap:'10px', background:'#FEF2F2', padding:'12px', borderRadius:'12px', border:'1px solid #FECDD3'}}>
-                 <input type="checkbox" id="archive-check" checked={editingWI.is_archived} onChange={e => setEditingWI({...editingWI, is_archived: e.target.checked})} style={{width: '18px', height: '18px'}} />
-                 <label htmlFor="archive-check" style={{fontSize:'13px', color:'#991B1B', fontWeight:'bold'}}>Tandai sebagai OBSOLETE (Arsip)</label>
-              </div>
-              <button type="submit" style={{...modalStyles.btnSaveWI, background: '#3B82F6'}}>Simpan Perubahan</button>
+              <button type="submit" style={{...modalStyles.btnSaveWI, background: '#3B82F6'}}>Update Data</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* --- MODAL PREVIEW PDF (BARU) --- */}
+      {/* --- PREVIEW MODAL --- */}
       {isPreviewOpen && (
         <div style={modalStyles.overlay}>
-          <div style={{...modalStyles.content, maxWidth: '95vw', width: '1000px', height: '90vh', padding: '15px'}}>
+          <div style={{...modalStyles.content, maxWidth: '95vw', width: '1100px', height: '90vh', padding: '10px'}}>
             <div style={modalStyles.header}>
-              <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                <FileText color="#3B82F6" />
-                <h3 style={{margin:0}}>Preview Dokumen WI</h3>
-              </div>
-              <button onClick={() => setIsPreviewOpen(false)} style={modalStyles.btnClose}>×</button>
+               <h3 style={{margin:0}}>Dokumen Preview</h3>
+               <button onClick={() => setIsPreviewOpen(false)} style={modalStyles.btnClose}>×</button>
             </div>
-            <iframe 
-              src={previewUrl} 
-              style={{width: '100%', height: 'calc(100% - 60px)', borderRadius: '12px', border: '1px solid #E2E8F0'}} 
-              title="PDF Preview"
-            />
+            <iframe src={previewUrl} style={{width: '100%', height: 'calc(100% - 50px)', borderRadius: '12px', border: 'none'}} />
           </div>
         </div>
       )}
@@ -369,8 +380,79 @@ function App() {
   );
 }
 
-const uploadStyles = { container: { border: '2px dashed #E2E8F0', borderRadius: '12px', padding: '10px', textAlign: 'center', cursor: 'pointer', background: '#F8FAFC' }, label: { cursor: 'pointer', display: 'block', width: '100%' }, inner: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40px', fontSize: '14px', fontWeight: '600' } };
-const uiStyles = { loginOverlay: { height: '100vh', width: '100vw', background: '#F1F5F9', display: 'flex', justifyContent: 'center', alignItems: 'center' }, loginCard: { background: 'white', padding: '40px', borderRadius: '30px', textAlign: 'center', width: '90%', maxWidth: '420px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }, loginBtnAdmin: { width: '100%', padding: '15px', borderRadius: '12px', border: 'none', background: '#10B981', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: 'bold', fontSize: '15px', marginTop: '10px' }, mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)' }, sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000 }, qrGeneralContainer: { marginTop: '25px', paddingTop: '20px', borderTop: '1px dashed #E2E8F0' }, qrWrapper: { background: 'white', padding: '10px', borderRadius: '15px', display: 'inline-block', border: '1px solid #E2E8F0' } };
-const modalStyles = { overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, backdropFilter: 'blur(4px)' }, content: { background: 'white', padding: '25px', borderRadius: '25px', width: '90%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }, header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }, input: { padding: '12px 15px', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '14px', width: '100%', boxSizing: 'border-box', outline: 'none' }, btnSaveWI: { padding: '15px', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }, btnClose: { background: '#F1F5F9', border: 'none', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' } };
+// --- STYLES HELPER ---
+const grid2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' };
+const labelS = { fontSize: '10px', fontWeight: '800', color: '#94A3B8', marginBottom: '4px', display: 'block' };
+const verifContainer = { background: '#F8FAFC', padding: '15px', borderRadius: '15px', border: '1px solid #E2E8F0' };
+
+const uploadStyles = { container: { border: '2px dashed #E2E8F0', borderRadius: '12px', padding: '10px', textAlign: 'center', background: '#F8FAFC' }, label: { cursor: 'pointer', display: 'block' }, inner: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40px', gap: '10px', fontSize: '14px', fontWeight: '600' } };
+
+const uiStyles = { 
+  // NEW LOGIN DESIGN
+  loginOverlay: { 
+    height: '100vh', width: '100vw', 
+    background: 'radial-gradient(circle at top left, #0f172a, #020617)', 
+    display: 'flex', justifyContent: 'center', alignItems: 'center',
+    fontFamily: "'Inter', sans-serif"
+  }, 
+  loginCard: { 
+    background: 'rgba(255, 255, 255, 0.03)', 
+    backdropFilter: 'blur(20px)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    padding: '50px 40px', borderRadius: '40px', textAlign: 'center', 
+    width: '90%', maxWidth: '440px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' 
+  }, 
+  loginHeader: { marginBottom: '35px' },
+  logoBox: { 
+    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', 
+    width: '80px', height: '80px', borderRadius: '24px', display: 'flex', 
+    alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto',
+    boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)'
+  },
+  loginTitle: { color: '#ffffff', fontSize: '36px', fontWeight: '900', margin: 0, letterSpacing: '-1px' },
+  loginSubtitle: { color: '#94A3B8', fontSize: '14px', margin: '5px 0 0 0' },
+  loginSlogan: { color: '#10B981', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '2px', marginTop: '10px' },
+  loginForm: { display: 'flex', flexDirection: 'column', gap: '15px' },
+  inputWrapper: {
+    display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.05)',
+    padding: '0 18px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)'
+  },
+  loginInput: { 
+    background: 'transparent', border: 'none', color: '#ffffff', padding: '16px 0', 
+    fontSize: '15px', width: '100%', outline: 'none' 
+  },
+  loginBtnAdmin: { 
+    width: '100%', padding: '18px', borderRadius: '16px', border: 'none', 
+    background: '#10B981', color: 'white', cursor: 'pointer', fontWeight: '900',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+    boxShadow: '0 10px 15px rgba(16, 185, 129, 0.2)', transition: '0.3s'
+  }, 
+  qrGeneralContainer: { marginTop: '40px', paddingTop: '30px', borderTop: '1px dashed rgba(255,255,255,0.1)' },
+  qrBox: { background: 'white', padding: '10px', borderRadius: '18px', display: 'inline-block', border: '4px solid #10B981' },
+
+  // SIDEBAR BRANDING
+  sidebarHeader: { padding: '30px 24px', display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid #F1F5F9' },
+  sidebarLogoBox: { 
+    background: '#10B981', padding: '8px', borderRadius: '10px', 
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0 4px 10px rgba(16, 185, 129, 0.2)'
+  },
+  sidebarBrandName: { fontSize: '22px', fontWeight: '900', color: '#1E293B', lineHeight: 1 },
+  sidebarBrandSlogan: { fontSize: '9px', color: '#10B981', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginTop: '4px' },
+
+  mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)' },
+  sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, backdropFilter: 'blur(4px)' },
+  verifCard: { flex: 1, display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', borderRadius: '12px', border: '2px solid', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', transition: '0.2s' },
+  emptyCircle: { width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #CBD5E1' }
+};
+
+const modalStyles = { 
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, backdropFilter: 'blur(8px)' }, 
+  content: { background: 'white', padding: '25px', borderRadius: '25px', width: '90%', maxHeight: '95vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }, 
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }, 
+  input: { padding: '12px 15px', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '14px', width: '100%', boxSizing: 'border-box', outline: 'none' }, 
+  btnSaveWI: { padding: '15px', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }, 
+  btnClose: { background: '#F1F5F9', border: 'none', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%' } 
+};
 
 export default App;
