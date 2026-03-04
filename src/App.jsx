@@ -50,6 +50,7 @@ function App() {
     const list = wi || [];
     setWiList(list);
     
+    // Perhitungan estimasi storage (MB)
     const estimatedSize = (list.filter(item => item.file_url).length * 0.7).toFixed(2);
     setStorageUsage(estimatedSize);
   };
@@ -78,14 +79,12 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // --- UPGRADE LOGIN: CEK DATABASE (USER_ACCESS) ---
   const handleLogin = async (e) => {
     e.preventDefault();
-    const divName = e.target.divisi.value; // Tidak perlu toLowerCase agar match case-sensitive jika perlu
+    const divName = e.target.divisi.value; 
     const password = e.target.password.value;
 
     try {
-      // Menanyakan ke brankas Supabase
       const { data, error } = await supabase
         .from('user_access')
         .select('*')
@@ -94,11 +93,9 @@ function App() {
         .single();
 
       if (data) {
-        // Jika data ditemukan (Username & Password cocok)
         setUserSession(data.username);
         setRole(data.role);
         
-        // Gunakan timeout agar state userSession ter-update dulu sebelum log ditulis
         setTimeout(() => {
             supabase.from('activity_logs').insert([{
                 user_name: data.username,
@@ -127,6 +124,7 @@ function App() {
     try {
       setIsUploading(true);
       const fileName = `${Date.now()}_${file.name}`;
+      // Path upload: wi_documents/nama_file.pdf
       const { error: uploadError } = await supabase.storage.from('wi-files').upload(`wi_documents/${fileName}`, file);
       if (uploadError) throw uploadError;
 
@@ -165,13 +163,38 @@ function App() {
     }
   };
 
-  const handleDeleteWI = async (id) => {
+  // --- FUNGSI DELETE UPGRADED: HAPUS DATABASE & STORAGE ---
+  const handleDeleteWI = async (id, fileUrl) => {
     const item = wiList.find(i => i.id === id);
-    if (window.confirm("Yakin hapus permanen?")) {
-      const { error } = await supabase.from('wi_data').delete().eq('id', id);
-      if (!error) {
-        await writeLog("DELETE", item?.part_number, "Dihapus permanen dari database");
-        fetchData();
+    if (!item) return;
+
+    if (window.confirm(`Yakin hapus permanen WI: ${item.part_number}? File di storage juga akan dihapus.`)) {
+      try {
+        // 1. Hapus File dari Storage jika ada URL-nya
+        if (fileUrl) {
+          const fileName = fileUrl.split('/').pop(); // Ambil nama file dari ujung URL
+          const { error: storageError } = await supabase
+            .storage
+            .from('wi-files')
+            .remove([`wi_documents/${fileName}`]);
+
+          if (storageError) {
+            console.warn("Storage error (mungkin file sudah tidak ada):", storageError.message);
+          }
+        }
+
+        // 2. Hapus Baris dari Database
+        const { error } = await supabase.from('wi_data').delete().eq('id', id);
+        
+        if (!error) {
+          await writeLog("DELETE", item.part_number, "Dihapus permanen (Data & File)");
+          alert("Data dan File fisik berhasil dihapus!");
+          fetchData();
+        } else {
+          throw error;
+        }
+      } catch (err) {
+        alert("Gagal menghapus: " + err.message);
       }
     }
   };
@@ -187,7 +210,7 @@ function App() {
                   storageUsage={storageUsage} 
                   onEdit={(wi) => { setEditingWI(wi); setIsModalEditWI(true); }} 
                   onOpenInputModal={() => setIsModalInputWI(true)} 
-                  onDelete={handleDeleteWI} 
+                  onDelete={(id, url) => handleDeleteWI(id, url)} // Mengirim ID dan URL ke fungsi hapus
                 />;
       case "logs": return <ActivityLog logs={logs} />; 
       default: return <Dashboard wiList={wiList} logs={logs} />;
@@ -323,6 +346,7 @@ function App() {
   );
 }
 
+// STYLES TETAP SAMA
 const uploadStyles = { container: { border: '2px dashed #E2E8F0', borderRadius: '12px', padding: '10px', textAlign: 'center', cursor: 'pointer', background: '#F8FAFC' }, label: { cursor: 'pointer', display: 'block', width: '100%' }, inner: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40px', fontSize: '14px', fontWeight: '600' } };
 const uiStyles = { loginOverlay: { height: '100vh', width: '100vw', background: '#F1F5F9', display: 'flex', justifyContent: 'center', alignItems: 'center' }, loginCard: { background: 'white', padding: '40px', borderRadius: '30px', textAlign: 'center', width: '90%', maxWidth: '420px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }, loginBtnAdmin: { width: '100%', padding: '15px', borderRadius: '12px', border: 'none', background: '#10B981', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontWeight: 'bold', fontSize: '15px', marginTop: '10px' }, mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)' }, sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000 }, qrGeneralContainer: { marginTop: '25px', paddingTop: '20px', borderTop: '1px dashed #E2E8F0' }, qrWrapper: { background: 'white', padding: '10px', borderRadius: '15px', display: 'inline-block', border: '1px solid #E2E8F0' } };
 const modalStyles = { overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, backdropFilter: 'blur(4px)' }, content: { background: 'white', padding: '25px', borderRadius: '25px', width: '90%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }, header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }, input: { padding: '12px 15px', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '14px', width: '100%', boxSizing: 'border-box', outline: 'none' }, btnSaveWI: { padding: '15px', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }, btnClose: { background: '#F1F5F9', border: 'none', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' } };
