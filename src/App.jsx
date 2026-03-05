@@ -43,7 +43,7 @@ function App() {
     status_oc: "O", 
     location: "", 
     revision_no: "", 
-    file_url: "", 
+    file_url: "", // Sekarang menyimpan PATH (Private)
     process_name: "", 
     is_archived: false,
     is_verified_eng: true, 
@@ -118,6 +118,7 @@ function App() {
     } catch (err) { alert("Gagal terhubung ke database!"); }
   };
 
+  // --- REVISI UPLOAD (PRIVATE PATH) ---
   const handleFileUpload = async (e, isEdit = false) => {
     const file = e.target.files[0];
     if (!file || file.type !== "application/pdf") return alert("Hanya PDF!");
@@ -126,14 +127,20 @@ function App() {
     try {
       setIsUploading(true);
       const fileName = `${Date.now()}_${file.name}`;
-      const { error: uploadError } = await supabase.storage.from('wi-files').upload(`wi_documents/${fileName}`, file);
+      const filePath = `wi_documents/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('wi-files')
+        .upload(filePath, file);
+
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage.from('wi-files').getPublicUrl(`wi_documents/${fileName}`);
-      if (isEdit) setEditingWI({ ...editingWI, file_url: publicUrl });
-      else setNewWI({ ...newWI, file_url: publicUrl });
-      alert("Upload Berhasil!");
-    } catch (error) { alert("Gagal upload!"); } 
+      // Simpan PATH saja, bukan Public URL
+      if (isEdit) setEditingWI({ ...editingWI, file_url: filePath });
+      else setNewWI({ ...newWI, file_url: filePath });
+      
+      alert("Upload Berhasil! Tersimpan di folder privat.");
+    } catch (error) { alert("Gagal upload: " + error.message); } 
     finally { setIsUploading(false); }
   };
 
@@ -171,8 +178,9 @@ function App() {
     if (window.confirm(`Hapus permanen ${item?.part_number}?`)) {
       try {
         if (fileUrl) {
-          const fileName = fileUrl.split('/').pop(); 
-          await supabase.storage.from('wi-files').remove([`wi_documents/${fileName}`]);
+          // Bersihkan path jika ada sisa string URL lama
+          const pathToDelete = fileUrl.includes('http') ? `wi_documents/${fileUrl.split('/').pop()}` : fileUrl;
+          await supabase.storage.from('wi-files').remove([pathToDelete]);
         }
         await supabase.from('wi_data').delete().eq('id', id);
         await writeLog("DELETE", item?.part_number, "Deleted from system");
@@ -181,9 +189,26 @@ function App() {
     }
   };
 
-  const handleOpenPreview = (url) => {
-    setPreviewUrl(url);
-    setIsPreviewOpen(true);
+  // --- REVISI PREVIEW (SIGNED URL) ---
+  const handleOpenPreview = async (path) => {
+    if (!path) return alert("File tidak ditemukan!");
+    
+    try {
+      // Logic untuk handle data lama (URL) dan data baru (Path)
+      const cleanPath = path.includes('http') ? `wi_documents/${path.split('/').pop()}` : path;
+
+      const { data, error } = await supabase.storage
+        .from('wi-files')
+        .createSignedUrl(cleanPath, 3600); // Berlaku 1 jam
+
+      if (error) throw error;
+
+      setPreviewUrl(data.signedUrl);
+      setIsPreviewOpen(true);
+    } catch (err) {
+      alert("Gagal memuat dokumen! Pastikan kebijakan storage benar.");
+      console.error(err);
+    }
   };
 
   const renderContent = () => {
@@ -199,7 +224,6 @@ function App() {
     }
   };
 
-  // --- UI LOGIN NIBOOK (EYE CATCHING) ---
   if (role === "unauthenticated") {
     return (
       <div style={uiStyles.loginOverlay}>
@@ -246,20 +270,16 @@ function App() {
 
       {isSidebarOpen && window.innerWidth < 768 && <div onClick={() => setIsSidebarOpen(false)} style={uiStyles.sidebarOverlay} />}
 
-      {/* --- SIDEBAR DENGAN BRANDING NIBOOK --- */}
       <div style={{ width: isSidebarOpen ? '260px' : '0', transition: '0.4s cubic-bezier(0.4, 0, 0.2, 1)', position: 'fixed', height: '100vh', zIndex: 3000, overflow: 'hidden', background: '#ffffff', borderRight: '1px solid #E2E8F0', boxShadow: '10px 0 30px rgba(0,0,0,0.02)' }}>
-        
-        {/* SIDEBAR HEADER BRANDING */}
         <div style={uiStyles.sidebarHeader}>
-           <div style={uiStyles.sidebarLogoBox}>
-             <BookOpen size={22} color="#ffffff" strokeWidth={3} />
-           </div>
-           <div style={{display:'flex', flexDirection:'column'}}>
-             <span style={uiStyles.sidebarBrandName}>NiBook</span>
-             <span style={uiStyles.sidebarBrandSlogan}>All for dreams</span>
-           </div>
+            <div style={uiStyles.sidebarLogoBox}>
+              <BookOpen size={22} color="#ffffff" strokeWidth={3} />
+            </div>
+            <div style={{display:'flex', flexDirection:'column'}}>
+              <span style={uiStyles.sidebarBrandName}>NiBook</span>
+              <span style={uiStyles.sidebarBrandSlogan}>All for dreams</span>
+            </div>
         </div>
-
         <Sidebar role={role} menu={menu} setMenu={(m) => { setMenu(m); if(window.innerWidth < 768) setIsSidebarOpen(false); }} userSession={userSession} />
       </div>
       
@@ -267,7 +287,6 @@ function App() {
         {renderContent()}
       </main>
 
-      {/* --- MODAL INPUT WI --- */}
       {isModalInputWI && (
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, maxWidth: '650px'}}>
@@ -276,22 +295,18 @@ function App() {
               <button onClick={() => setIsModalInputWI(false)} style={modalStyles.btnClose}>×</button>
             </div>
             <form onSubmit={handleSaveWI} style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
-              
               <div style={grid2}>
                 <div><label style={labelS}>CUSTOMER</label><input style={modalStyles.input} placeholder="Nama Customer" required value={newWI.customer} onChange={e=>setNewWI({...newWI, customer: e.target.value})}/></div>
                 <div><label style={labelS}>PROSES</label><input style={modalStyles.input} placeholder="Injection / Assy" required value={newWI.process_name} onChange={e=>setNewWI({...newWI, process_name: e.target.value})}/></div>
               </div>
-
               <div style={grid2}>
                 <div><label style={labelS}>PART NUMBER</label><input style={modalStyles.input} placeholder="P/N" required value={newWI.part_number} onChange={e=>setNewWI({...newWI, part_number: e.target.value})}/></div>
                 <div><label style={labelS}>MOLD NUMBER</label><input style={modalStyles.input} placeholder="M/N" required value={newWI.mold_number} onChange={e=>setNewWI({...newWI, mold_number: e.target.value})}/></div>
               </div>
-
               <div style={grid2}>
                 <div><label style={labelS}>MODEL</label><input style={modalStyles.input} placeholder="Nama Model" required value={newWI.model} onChange={e=>setNewWI({...newWI, model: e.target.value})}/></div>
                 <div><label style={labelS}>REVISI KE-</label><input style={modalStyles.input} placeholder="01" required value={newWI.revision_no} onChange={e=>setNewWI({...newWI, revision_no: e.target.value})}/></div>
               </div>
-
               <div style={verifContainer}>
                 <p style={{fontSize: '11px', fontWeight: '800', color: '#475569', marginBottom: '10px'}}>PHYSICAL VERIFICATION CHECKLIST</p>
                 <div style={{display: 'flex', gap: '8px'}}>
@@ -307,9 +322,7 @@ function App() {
                   ))}
                 </div>
               </div>
-
               <div><label style={labelS}>REMARKS (ALASAN REVISI)</label><textarea style={{...modalStyles.input, height: '60px'}} placeholder="Wajib diisi..." required value={newWI.remarks} onChange={e=>setNewWI({...newWI, remarks: e.target.value})}/></div>
-
               <div style={uploadStyles.container}>
                 <label style={uploadStyles.label}>
                   <div style={uploadStyles.inner}>
@@ -318,14 +331,12 @@ function App() {
                   <input type="file" accept=".pdf" onChange={(e) => handleFileUpload(e, false)} style={{display: 'none'}} />
                 </label>
               </div>
-
               <button type="submit" disabled={isUploading || !newWI.file_url} style={{...modalStyles.btnSaveWI, background: (isUploading || !newWI.file_url) ? '#CBD5E1' : '#10B981'}}>Aktifkan Master WI</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* --- MODAL EDIT WI --- */}
       {isModalEditWI && editingWI && (
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, maxWidth: '600px'}}>
@@ -364,12 +375,11 @@ function App() {
         </div>
       )}
 
-      {/* --- PREVIEW MODAL --- */}
       {isPreviewOpen && (
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, maxWidth: '95vw', width: '1100px', height: '90vh', padding: '10px'}}>
             <div style={modalStyles.header}>
-               <h3 style={{margin:0}}>Dokumen Preview</h3>
+               <h3 style={{margin:0}}>Dokumen Preview (Private)</h3>
                <button onClick={() => setIsPreviewOpen(false)} style={modalStyles.btnClose}>×</button>
             </div>
             <iframe src={previewUrl} style={{width: '100%', height: 'calc(100% - 50px)', borderRadius: '12px', border: 'none'}} />
@@ -388,58 +398,23 @@ const verifContainer = { background: '#F8FAFC', padding: '15px', borderRadius: '
 const uploadStyles = { container: { border: '2px dashed #E2E8F0', borderRadius: '12px', padding: '10px', textAlign: 'center', background: '#F8FAFC' }, label: { cursor: 'pointer', display: 'block' }, inner: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40px', gap: '10px', fontSize: '14px', fontWeight: '600' } };
 
 const uiStyles = { 
-  // NEW LOGIN DESIGN
-  loginOverlay: { 
-    height: '100vh', width: '100vw', 
-    background: 'radial-gradient(circle at top left, #0f172a, #020617)', 
-    display: 'flex', justifyContent: 'center', alignItems: 'center',
-    fontFamily: "'Inter', sans-serif"
-  }, 
-  loginCard: { 
-    background: 'rgba(255, 255, 255, 0.03)', 
-    backdropFilter: 'blur(20px)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    padding: '50px 40px', borderRadius: '40px', textAlign: 'center', 
-    width: '90%', maxWidth: '440px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' 
-  }, 
+  loginOverlay: { height: '100vh', width: '100vw', background: 'radial-gradient(circle at top left, #0f172a, #020617)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: "'Inter', sans-serif" }, 
+  loginCard: { background: 'rgba(255, 255, 255, 0.03)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '50px 40px', borderRadius: '40px', textAlign: 'center', width: '90%', maxWidth: '440px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }, 
   loginHeader: { marginBottom: '35px' },
-  logoBox: { 
-    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', 
-    width: '80px', height: '80px', borderRadius: '24px', display: 'flex', 
-    alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto',
-    boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)'
-  },
+  logoBox: { background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', width: '80px', height: '80px', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)' },
   loginTitle: { color: '#ffffff', fontSize: '36px', fontWeight: '900', margin: 0, letterSpacing: '-1px' },
   loginSubtitle: { color: '#94A3B8', fontSize: '14px', margin: '5px 0 0 0' },
   loginSlogan: { color: '#10B981', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '2px', marginTop: '10px' },
   loginForm: { display: 'flex', flexDirection: 'column', gap: '15px' },
-  inputWrapper: {
-    display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.05)',
-    padding: '0 18px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)'
-  },
-  loginInput: { 
-    background: 'transparent', border: 'none', color: '#ffffff', padding: '16px 0', 
-    fontSize: '15px', width: '100%', outline: 'none' 
-  },
-  loginBtnAdmin: { 
-    width: '100%', padding: '18px', borderRadius: '16px', border: 'none', 
-    background: '#10B981', color: 'white', cursor: 'pointer', fontWeight: '900',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-    boxShadow: '0 10px 15px rgba(16, 185, 129, 0.2)', transition: '0.3s'
-  }, 
+  inputWrapper: { display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.05)', padding: '0 18px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' },
+  loginInput: { background: 'transparent', border: 'none', color: '#ffffff', padding: '16px 0', fontSize: '15px', width: '100%', outline: 'none' },
+  loginBtnAdmin: { width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#10B981', color: 'white', cursor: 'pointer', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 10px 15px rgba(16, 185, 129, 0.2)', transition: '0.3s' }, 
   qrGeneralContainer: { marginTop: '40px', paddingTop: '30px', borderTop: '1px dashed rgba(255,255,255,0.1)' },
   qrBox: { background: 'white', padding: '10px', borderRadius: '18px', display: 'inline-block', border: '4px solid #10B981' },
-
-  // SIDEBAR BRANDING
   sidebarHeader: { padding: '30px 24px', display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid #F1F5F9' },
-  sidebarLogoBox: { 
-    background: '#10B981', padding: '8px', borderRadius: '10px', 
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    boxShadow: '0 4px 10px rgba(16, 185, 129, 0.2)'
-  },
+  sidebarLogoBox: { background: '#10B981', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(16, 185, 129, 0.2)' },
   sidebarBrandName: { fontSize: '22px', fontWeight: '900', color: '#1E293B', lineHeight: 1 },
   sidebarBrandSlogan: { fontSize: '9px', color: '#10B981', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginTop: '4px' },
-
   mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)' },
   sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, backdropFilter: 'blur(4px)' },
   verifCard: { flex: 1, display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', borderRadius: '12px', border: '2px solid', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', transition: '0.2s' },
