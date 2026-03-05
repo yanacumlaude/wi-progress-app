@@ -32,7 +32,7 @@ function App() {
 
   const initialWIState = {
     customer: "", 
-    date_created: new Date().toLocaleDateString('id-ID'), // Format sesuai kolom text di DB
+    date_created: new Date().toLocaleDateString('id-ID'), 
     part_number: "", 
     mold_number: "", 
     model: "", 
@@ -40,7 +40,7 @@ function App() {
     is_6_sisi: false, 
     condition: "Bagus", 
     remarks: "", 
-    status_oc: "Open", // Disamakan dengan default database
+    status_oc: "Open", 
     location: "", 
     revision_no: "", 
     file_url: "", 
@@ -125,7 +125,7 @@ function App() {
 
     try {
       setIsUploading(true);
-      const fileName = `${Date.now()}_${file.name.replace(/\s/g, '_')}`; // Hapus spasi biar URL gak error 400
+      const fileName = `${Date.now()}_${file.name.replace(/\s/g, '_')}`; 
       const filePath = `wi_documents/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -142,15 +142,12 @@ function App() {
     finally { setIsUploading(false); }
   };
 
-  // --- REVISI HANDLE SAVE (FIX ERROR 406) ---
   const handleSaveWI = async (e) => {
     e.preventDefault();
     if (!newWI.remarks || newWI.remarks.length < 5) return alert("Remarks (Alasan) wajib diisi!");
 
     try {
       setIsUploading(true);
-
-      // 1. Bersihkan Payload (Hanya kirim kolom yang ada di tabel)
       const payload = {
         customer: newWI.customer,
         part_number: newWI.part_number,
@@ -172,14 +169,12 @@ function App() {
         is_verified_prod: Boolean(newWI.is_verified_prod)
       };
 
-      // 2. Arsipkan versi lama
       await supabase
         .from('wi_data')
         .update({ is_archived: true })
         .eq('part_number', payload.part_number)
         .eq('is_archived', false);
 
-      // 3. Insert Baru
       const { error } = await supabase.from('wi_data').insert([payload]);
       if (error) throw error;
 
@@ -196,20 +191,12 @@ function App() {
     }
   };
 
-  // --- REVISI UPDATE (FIX ERROR 406) ---
   const handleUpdateWI = async (e) => {
     e.preventDefault();
     try {
-      // Buat salinan data dan hapus ID agar tidak dikirim dalam body update (beberapa DB sensitif)
       const { id, ...updateData } = editingWI;
-      
-      const { error } = await supabase
-        .from('wi_data')
-        .update(updateData)
-        .eq('id', id);
-
+      const { error } = await supabase.from('wi_data').update(updateData).eq('id', id);
       if (error) throw error;
-
       await writeLog("UPDATE", editingWI.part_number, "Data updated");
       alert("Berhasil Diperbarui!"); 
       setIsModalEditWI(false); 
@@ -219,31 +206,58 @@ function App() {
     }
   };
 
+  // --- FIXED DELETE FUNCTION ---
   const handleDeleteWI = async (id, fileUrl) => {
     const item = wiList.find(i => i.id === id);
     if (window.confirm(`Hapus permanen ${item?.part_number}?`)) {
       try {
         if (fileUrl) {
-          const pathToDelete = fileUrl.includes('http') ? fileUrl.split('wi-files/').pop().split('?')[0] : fileUrl;
-          await supabase.storage.from('wi-files').remove([pathToDelete]);
+          // Pastikan path menyertakan folder wi_documents/
+          let pathToDelete = fileUrl;
+          if (fileUrl.includes('wi-files/')) {
+            pathToDelete = fileUrl.split('wi-files/').pop().split('?')[0];
+          } else if (!fileUrl.includes('wi_documents/')) {
+            pathToDelete = `wi_documents/${fileUrl}`;
+          }
+
+          console.log("Menghapus dari storage:", pathToDelete);
+          const { error: storageError } = await supabase.storage.from('wi-files').remove([pathToDelete]);
+          if (storageError) console.error("Storage delete warning:", storageError.message);
         }
-        await supabase.from('wi_data').delete().eq('id', id);
+
+        const { error: dbError } = await supabase.from('wi_data').delete().eq('id', id);
+        if (dbError) throw dbError;
+
         await writeLog("DELETE", item?.part_number, "Deleted from system");
+        alert("Data & File Berhasil Dihapus!");
         fetchData();
-      } catch (err) { alert("Gagal hapus!"); }
+      } catch (err) { 
+        alert("Gagal hapus: " + err.message); 
+      }
     }
   };
 
+  // --- FIXED PREVIEW FUNCTION ---
   const handleOpenPreview = async (path) => {
     if (!path) return alert("File tidak ditemukan!");
     try {
-      const cleanPath = path.includes('http') ? path.split('wi-files/').pop().split('?')[0] : path;
+      // Pastikan path selalu lengkap dengan nama foldernya agar tidak 404
+      let cleanPath = path;
+      if (path.includes('wi-files/')) {
+        cleanPath = path.split('wi-files/').pop().split('?')[0];
+      } else if (!path.includes('wi_documents/')) {
+        cleanPath = `wi_documents/${path}`;
+      }
+
+      console.log("Membuka preview path:", cleanPath);
       const { data, error } = await supabase.storage.from('wi-files').createSignedUrl(cleanPath, 3600);
-      if (error) throw error;
+      
+      if (error || !data?.signedUrl) throw new Error("File tidak ditemukan di Storage");
+      
       setPreviewUrl(data.signedUrl);
       setIsPreviewOpen(true);
     } catch (err) {
-      alert("Gagal memuat dokumen!");
+      alert("Gagal memuat dokumen: " + err.message);
       console.error(err);
     }
   };
@@ -427,7 +441,7 @@ function App() {
   );
 }
 
-// Styles helper tetap sama
+// Styles (Tetap sama)
 const grid2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' };
 const labelS = { fontSize: '10px', fontWeight: '800', color: '#94A3B8', marginBottom: '4px', display: 'block' };
 const verifContainer = { background: '#F8FAFC', padding: '15px', borderRadius: '15px', border: '1px solid #E2E8F0' };
