@@ -161,7 +161,6 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
                 <td style={{...styles.td}}>
                   <div style={{fontWeight: '800', marginBottom: '6px', color: '#1E293B', letterSpacing: '0.3px'}}>{highlightText(wi.part_number, searchTerm)}</div>
                   
-                  {/* --- VERIFICATION AREA (DICAKEPIN LAGI) --- */}
                   <div style={{display: 'flex', gap: '4px'}}>
                     {['eng', 'qc', 'prod'].map(dept => {
                       const isVerif = wi[`is_verified_${dept}`];
@@ -180,7 +179,6 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
                   </div>
                 </td>
                 
-                {/* KOLOM MOLD & MODEL TETAP AMAN */}
                 <td style={{...styles.td, fontWeight: '600'}}>{highlightText(wi.mold_number, searchTerm) || '-'}</td>
                 <td style={styles.td}>{highlightText(wi.model, searchTerm) || '-'}</td>
                 
@@ -208,8 +206,24 @@ export default function WICenterLibrary({ wiList, role, onEdit, onOpenInputModal
                 </td>
                 <td style={styles.td}>
                   <div style={styles.actionGroup}>
-                    <button onClick={() => onPreview(wi.file_url)} style={styles.iconBtnPreview} title="Quick Preview"><Eye size={16} /></button>
-                    <a href={wi.file_url} target="_blank" rel="noreferrer" style={styles.iconBtnOpen} title="Open in New Tab"><ExternalLink size={16} /></a>
+                    {/* Tombol Preview Modal */}
+                    <button 
+                      onClick={() => onPreview(wi.file_url)} 
+                      style={styles.iconBtnPreview} 
+                      title="Quick Preview"
+                    >
+                      <Eye size={16} />
+                    </button>
+
+                    {/* Tombol Open Baru (Sekarang pakai onPreview agar URL-nya valid) */}
+                    <button 
+                      onClick={() => onPreview(wi.file_url)} 
+                      style={styles.iconBtnOpen} 
+                      title="Open in New Tab"
+                    >
+                      <ExternalLink size={16} />
+                    </button>
+
                     {role === 'admin' && (
                       <>
                         <button onClick={() => onEdit(wi)} style={styles.iconBtnEdit} title="Edit Data"><Edit3 size={16} /></button>
@@ -258,36 +272,15 @@ const styles = {
   th: { padding: '12px 15px', fontSize: '11px', color: '#64748B', textAlign: 'left', fontWeight: 'bold' },
   tr: { borderBottom: '1px solid #F1F5F9' },
   td: { padding: '12px 15px', fontSize: '13px', color: '#334155' },
-  
-  remarksText: { 
-    maxWidth: '150px', 
-    fontSize: '11px', 
-    color: '#64748B', 
-    fontStyle: 'italic',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis'
-  },
-
-  verifBadge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '3px',
-    fontSize: '9px',
-    fontWeight: '900',
-    padding: '2px 6px',
-    borderRadius: '6px',
-    border: '1px solid',
-    transition: 'all 0.2s ease'
-  },
-
+  remarksText: { maxWidth: '150px', fontSize: '11px', color: '#64748B', fontStyle: 'italic', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  verifBadge: { display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '9px', fontWeight: '900', padding: '2px 6px', borderRadius: '6px', border: '1px solid', transition: 'all 0.2s ease' },
   customerBadge: { background: '#F1F5F9', color: '#475569', padding: '3px 8px', borderRadius: '5px', fontSize: '11px', fontWeight: 'bold' },
   statusBtn: { border: 'none', background: 'none', padding: 0 },
   statusUse: { color: '#059669', background: '#DCFCE7', padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' },
   statusObsolete: { color: '#DC2626', background: '#FEE2E2', padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' },
   actionGroup: { display: 'flex', gap: '5px' },
   iconBtnPreview: { padding: '8px', background: '#F0F9FF', borderRadius: '8px', color: '#0EA5E9', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' },
-  iconBtnOpen: { padding: '8px', background: '#F1F5F9', borderRadius: '8px', color: '#475569', display: 'flex', alignItems: 'center', textDecoration: 'none' },
+  iconBtnOpen: { padding: '8px', background: '#F1F5F9', borderRadius: '8px', color: '#475569', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }, // Diubah dari tag <a> ke button
   iconBtnEdit: { padding: '8px', background: '#EFF6FF', borderRadius: '8px', color: '#2563EB', border: 'none', cursor: 'pointer' },
   iconBtnDelete: { padding: '8px', background: '#FEF2F2', borderRadius: '8px', color: '#DC2626', border: 'none', cursor: 'pointer' },
   emptyCell: { textAlign: 'center', padding: '40px', color: '#94A3B8' }
