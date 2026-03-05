@@ -206,14 +206,12 @@ function App() {
     }
   };
 
-  // --- FIXED DELETE FUNCTION (Sesuai Kebutuhan) ---
   const handleDeleteWI = async (id, fileUrl) => {
     const item = wiList.find(i => i.id === id);
     if (window.confirm(`Hapus permanen ${item?.part_number}?`)) {
       try {
         if (fileUrl) {
           let pathToDelete = fileUrl;
-          // Pembersihan path agar konsisten
           if (fileUrl.includes('wi-files/')) {
             pathToDelete = fileUrl.split('wi-files/').pop().split('?')[0];
           } else if (!fileUrl.includes('wi_documents/')) {
@@ -237,32 +235,41 @@ function App() {
     }
   };
 
-  // --- FIXED PREVIEW FUNCTION (Solusi Error 404 Vercel) ---
+  // --- FINAL FIXED PREVIEW FUNCTION ---
   const handleOpenPreview = async (path) => {
     if (!path) return alert("File tidak ditemukan!");
+    
     try {
-      let cleanPath = path;
-      // Normalisasi path agar tidak double folder
-      if (path.includes('wi-files/')) {
-        cleanPath = path.split('wi-files/').pop().split('?')[0];
-      } else if (!path.includes('wi_documents/')) {
-        cleanPath = `wi_documents/${path}`;
+      // 1. Membersihkan path dari URL mentah atau query string
+      let cleanPath = path.split('?')[0]; 
+      
+      // Jika path mengandung folder storage (wi-files), ambil bagian setelahnya
+      if (cleanPath.includes('wi-files/')) {
+        cleanPath = cleanPath.split('wi-files/').pop();
       }
 
-      console.log("Meminta Signed URL untuk:", cleanPath);
-      
-      // Menggunakan createSignedUrl agar file Private bisa diakses sementara lewat link Supabase
+      // Pastikan tidak ada karakter '/' di depan agar tidak terbaca sebagai root salah
+      cleanPath = cleanPath.replace(/^\/+/, '');
+
+      console.log("Mencoba akses file di path:", cleanPath);
+
+      // 2. Request Signed URL ke Supabase
       const { data, error } = await supabase.storage
         .from('wi-files')
-        .createSignedUrl(cleanPath, 3600); // Aktif 1 jam
+        .createSignedUrl(cleanPath, 3600); // Link valid 1 jam
       
-      if (error || !data?.signedUrl) throw new Error("File tidak ditemukan di Storage Supabase");
+      if (error) {
+        console.error("Supabase Storage Error:", error);
+        throw new Error(`File gagal diambil (${error.message}). Pastikan Role 'anon' sudah di-allow di Policy SELECT.`);
+      }
+      
+      if (!data?.signedUrl) throw new Error("Gagal generate link akses.");
       
       setPreviewUrl(data.signedUrl);
       setIsPreviewOpen(true);
     } catch (err) {
-      alert("Gagal memuat dokumen: " + err.message);
-      console.error(err);
+      alert("Akses Dokumen Gagal: " + err.message);
+      console.error("Preview Error Detail:", err);
     }
   };
 
@@ -434,10 +441,11 @@ function App() {
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, maxWidth: '95vw', width: '1100px', height: '90vh', padding: '10px'}}>
             <div style={modalStyles.header}>
-               <h3 style={{margin:0}}>Dokumen Preview (Private)</h3>
+               <h3 style={{margin:0}}>Dokumen Preview</h3>
                <button onClick={() => setIsPreviewOpen(false)} style={modalStyles.btnClose}>×</button>
             </div>
-            <iframe src={previewUrl} style={{width: '100%', height: 'calc(100% - 50px)', borderRadius: '12px', border: 'none'}} />
+            {/* Menggunakan signedUrl dari Supabase secara langsung */}
+            <iframe src={previewUrl} title="Document Preview" style={{width: '100%', height: 'calc(100% - 50px)', borderRadius: '12px', border: 'none'}} />
           </div>
         </div>
       )}
@@ -445,7 +453,7 @@ function App() {
   );
 }
 
-// Styles Tetap Sama
+// Styles (Dibiarkan Sesuai Aslinya)
 const grid2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' };
 const labelS = { fontSize: '10px', fontWeight: '800', color: '#94A3B8', marginBottom: '4px', display: 'block' };
 const verifContainer = { background: '#F8FAFC', padding: '15px', borderRadius: '15px', border: '1px solid #E2E8F0' };
