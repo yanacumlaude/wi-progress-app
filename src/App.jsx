@@ -206,14 +206,14 @@ function App() {
     }
   };
 
-  // --- FIXED DELETE FUNCTION ---
+  // --- FIXED DELETE FUNCTION (Sesuai Kebutuhan) ---
   const handleDeleteWI = async (id, fileUrl) => {
     const item = wiList.find(i => i.id === id);
     if (window.confirm(`Hapus permanen ${item?.part_number}?`)) {
       try {
         if (fileUrl) {
-          // Pastikan path menyertakan folder wi_documents/
           let pathToDelete = fileUrl;
+          // Pembersihan path agar konsisten
           if (fileUrl.includes('wi-files/')) {
             pathToDelete = fileUrl.split('wi-files/').pop().split('?')[0];
           } else if (!fileUrl.includes('wi_documents/')) {
@@ -237,22 +237,26 @@ function App() {
     }
   };
 
-  // --- FIXED PREVIEW FUNCTION ---
+  // --- FIXED PREVIEW FUNCTION (Solusi Error 404 Vercel) ---
   const handleOpenPreview = async (path) => {
     if (!path) return alert("File tidak ditemukan!");
     try {
-      // Pastikan path selalu lengkap dengan nama foldernya agar tidak 404
       let cleanPath = path;
+      // Normalisasi path agar tidak double folder
       if (path.includes('wi-files/')) {
         cleanPath = path.split('wi-files/').pop().split('?')[0];
       } else if (!path.includes('wi_documents/')) {
         cleanPath = `wi_documents/${path}`;
       }
 
-      console.log("Membuka preview path:", cleanPath);
-      const { data, error } = await supabase.storage.from('wi-files').createSignedUrl(cleanPath, 3600);
+      console.log("Meminta Signed URL untuk:", cleanPath);
       
-      if (error || !data?.signedUrl) throw new Error("File tidak ditemukan di Storage");
+      // Menggunakan createSignedUrl agar file Private bisa diakses sementara lewat link Supabase
+      const { data, error } = await supabase.storage
+        .from('wi-files')
+        .createSignedUrl(cleanPath, 3600); // Aktif 1 jam
+      
+      if (error || !data?.signedUrl) throw new Error("File tidak ditemukan di Storage Supabase");
       
       setPreviewUrl(data.signedUrl);
       setIsPreviewOpen(true);
@@ -441,7 +445,7 @@ function App() {
   );
 }
 
-// Styles (Tetap sama)
+// Styles Tetap Sama
 const grid2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' };
 const labelS = { fontSize: '10px', fontWeight: '800', color: '#94A3B8', marginBottom: '4px', display: 'block' };
 const verifContainer = { background: '#F8FAFC', padding: '15px', borderRadius: '15px', border: '1px solid #E2E8F0' };
