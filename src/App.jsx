@@ -32,7 +32,7 @@ function App() {
 
   const initialWIState = {
     customer: "", 
-    date_created: new Date().toISOString().split('T')[0], 
+    date_created: new Date().toLocaleDateString('id-ID'), // Format sesuai kolom text di DB
     part_number: "", 
     mold_number: "", 
     model: "", 
@@ -40,10 +40,10 @@ function App() {
     is_6_sisi: false, 
     condition: "Bagus", 
     remarks: "", 
-    status_oc: "O", 
+    status_oc: "Open", // Disamakan dengan default database
     location: "", 
     revision_no: "", 
-    file_url: "", // Sekarang menyimpan PATH (Private)
+    file_url: "", 
     process_name: "", 
     is_archived: false,
     is_verified_eng: true, 
@@ -118,7 +118,6 @@ function App() {
     } catch (err) { alert("Gagal terhubung ke database!"); }
   };
 
-  // --- REVISI UPLOAD (PRIVATE PATH) ---
   const handleFileUpload = async (e, isEdit = false) => {
     const file = e.target.files[0];
     if (!file || file.type !== "application/pdf") return alert("Hanya PDF!");
@@ -126,7 +125,7 @@ function App() {
 
     try {
       setIsUploading(true);
-      const fileName = `${Date.now()}_${file.name}`;
+      const fileName = `${Date.now()}_${file.name.replace(/\s/g, '_')}`; // Hapus spasi biar URL gak error 400
       const filePath = `wi_documents/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -135,41 +134,88 @@ function App() {
 
       if (uploadError) throw uploadError;
 
-      // Simpan PATH saja, bukan Public URL
       if (isEdit) setEditingWI({ ...editingWI, file_url: filePath });
       else setNewWI({ ...newWI, file_url: filePath });
       
-      alert("Upload Berhasil! Tersimpan di folder privat.");
+      alert("Upload Berhasil!");
     } catch (error) { alert("Gagal upload: " + error.message); } 
     finally { setIsUploading(false); }
   };
 
+  // --- REVISI HANDLE SAVE (FIX ERROR 406) ---
   const handleSaveWI = async (e) => {
     e.preventDefault();
     if (!newWI.remarks || newWI.remarks.length < 5) return alert("Remarks (Alasan) wajib diisi!");
 
     try {
-      await supabase.from('wi_data').update({ is_archived: true }).eq('part_number', newWI.part_number).eq('is_archived', false);
-      const { error } = await supabase.from('wi_data').insert([newWI]);
+      setIsUploading(true);
+
+      // 1. Bersihkan Payload (Hanya kirim kolom yang ada di tabel)
+      const payload = {
+        customer: newWI.customer,
+        part_number: newWI.part_number,
+        model: newWI.model,
+        location: newWI.location,
+        is_logo_updated: Boolean(newWI.is_logo_updated),
+        condition: newWI.condition,
+        mold_number: newWI.mold_number,
+        is_6_sisi: Boolean(newWI.is_6_sisi),
+        remarks: newWI.remarks,
+        status_oc: "Open",
+        date_created: new Date().toLocaleDateString('id-ID'),
+        file_url: newWI.file_url,
+        process_name: newWI.process_name,
+        revision_no: newWI.revision_no,
+        is_archived: false,
+        is_verified_eng: Boolean(newWI.is_verified_eng),
+        is_verified_qc: Boolean(newWI.is_verified_qc),
+        is_verified_prod: Boolean(newWI.is_verified_prod)
+      };
+
+      // 2. Arsipkan versi lama
+      await supabase
+        .from('wi_data')
+        .update({ is_archived: true })
+        .eq('part_number', payload.part_number)
+        .eq('is_archived', false);
+
+      // 3. Insert Baru
+      const { error } = await supabase.from('wi_data').insert([payload]);
       if (error) throw error;
 
-      await writeLog("CREATE", newWI.part_number, `New Rev: ${newWI.revision_no}`);
+      await writeLog("CREATE", payload.part_number, `New Rev: ${payload.revision_no}`);
       alert("Master WI Berhasil Disimpan!"); 
       setIsModalInputWI(false); 
       setNewWI(initialWIState); 
       fetchData(); 
-    } catch (err) { alert("Error: " + err.message); }
+    } catch (err) { 
+      console.error("Save Error:", err);
+      alert("Error: " + err.message); 
+    } finally {
+      setIsUploading(false);
+    }
   };
 
+  // --- REVISI UPDATE (FIX ERROR 406) ---
   const handleUpdateWI = async (e) => {
     e.preventDefault();
-    const { error } = await supabase.from('wi_data').update(editingWI).eq('id', editingWI.id);
-    if (error) alert(error.message);
-    else { 
+    try {
+      // Buat salinan data dan hapus ID agar tidak dikirim dalam body update (beberapa DB sensitif)
+      const { id, ...updateData } = editingWI;
+      
+      const { error } = await supabase
+        .from('wi_data')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) throw error;
+
       await writeLog("UPDATE", editingWI.part_number, "Data updated");
       alert("Berhasil Diperbarui!"); 
       setIsModalEditWI(false); 
       fetchData(); 
+    } catch (err) {
+      alert("Update Gagal: " + err.message);
     }
   };
 
@@ -178,8 +224,7 @@ function App() {
     if (window.confirm(`Hapus permanen ${item?.part_number}?`)) {
       try {
         if (fileUrl) {
-          // Bersihkan path jika ada sisa string URL lama
-          const pathToDelete = fileUrl.includes('http') ? `wi_documents/${fileUrl.split('/').pop()}` : fileUrl;
+          const pathToDelete = fileUrl.includes('http') ? fileUrl.split('wi-files/').pop().split('?')[0] : fileUrl;
           await supabase.storage.from('wi-files').remove([pathToDelete]);
         }
         await supabase.from('wi_data').delete().eq('id', id);
@@ -189,24 +234,16 @@ function App() {
     }
   };
 
-  // --- REVISI PREVIEW (SIGNED URL) ---
   const handleOpenPreview = async (path) => {
     if (!path) return alert("File tidak ditemukan!");
-    
     try {
-      // Logic untuk handle data lama (URL) dan data baru (Path)
-      const cleanPath = path.includes('http') ? `wi_documents/${path.split('/').pop()}` : path;
-
-      const { data, error } = await supabase.storage
-        .from('wi-files')
-        .createSignedUrl(cleanPath, 3600); // Berlaku 1 jam
-
+      const cleanPath = path.includes('http') ? path.split('wi-files/').pop().split('?')[0] : path;
+      const { data, error } = await supabase.storage.from('wi-files').createSignedUrl(cleanPath, 3600);
       if (error) throw error;
-
       setPreviewUrl(data.signedUrl);
       setIsPreviewOpen(true);
     } catch (err) {
-      alert("Gagal memuat dokumen! Pastikan kebijakan storage benar.");
+      alert("Gagal memuat dokumen!");
       console.error(err);
     }
   };
@@ -366,8 +403,8 @@ function App() {
               </div>
               <textarea style={modalStyles.input} value={editingWI.remarks} onChange={e=>setEditingWI({...editingWI, remarks: e.target.value})}/>
               <div style={{display:'flex', alignItems:'center', gap:'10px', background:'#FEF2F2', padding:'12px', borderRadius:'12px'}}>
-                 <input type="checkbox" checked={editingWI.is_archived} onChange={e => setEditingWI({...editingWI, is_archived: e.target.checked})} />
-                 <label style={{fontSize:'13px', color:'#991B1B', fontWeight:'bold'}}>SET AS OBSOLETE (ARCHIVE)</label>
+                  <input type="checkbox" checked={editingWI.is_archived} onChange={e => setEditingWI({...editingWI, is_archived: e.target.checked})} />
+                  <label style={{fontSize:'13px', color:'#991B1B', fontWeight:'bold'}}>SET AS OBSOLETE (ARCHIVE)</label>
               </div>
               <button type="submit" style={{...modalStyles.btnSaveWI, background: '#3B82F6'}}>Update Data</button>
             </form>
@@ -390,44 +427,12 @@ function App() {
   );
 }
 
-// --- STYLES HELPER ---
+// Styles helper tetap sama
 const grid2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' };
 const labelS = { fontSize: '10px', fontWeight: '800', color: '#94A3B8', marginBottom: '4px', display: 'block' };
 const verifContainer = { background: '#F8FAFC', padding: '15px', borderRadius: '15px', border: '1px solid #E2E8F0' };
-
 const uploadStyles = { container: { border: '2px dashed #E2E8F0', borderRadius: '12px', padding: '10px', textAlign: 'center', background: '#F8FAFC' }, label: { cursor: 'pointer', display: 'block' }, inner: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40px', gap: '10px', fontSize: '14px', fontWeight: '600' } };
-
-const uiStyles = { 
-  loginOverlay: { height: '100vh', width: '100vw', background: 'radial-gradient(circle at top left, #0f172a, #020617)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: "'Inter', sans-serif" }, 
-  loginCard: { background: 'rgba(255, 255, 255, 0.03)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '50px 40px', borderRadius: '40px', textAlign: 'center', width: '90%', maxWidth: '440px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }, 
-  loginHeader: { marginBottom: '35px' },
-  logoBox: { background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', width: '80px', height: '80px', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)' },
-  loginTitle: { color: '#ffffff', fontSize: '36px', fontWeight: '900', margin: 0, letterSpacing: '-1px' },
-  loginSubtitle: { color: '#94A3B8', fontSize: '14px', margin: '5px 0 0 0' },
-  loginSlogan: { color: '#10B981', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '2px', marginTop: '10px' },
-  loginForm: { display: 'flex', flexDirection: 'column', gap: '15px' },
-  inputWrapper: { display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.05)', padding: '0 18px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' },
-  loginInput: { background: 'transparent', border: 'none', color: '#ffffff', padding: '16px 0', fontSize: '15px', width: '100%', outline: 'none' },
-  loginBtnAdmin: { width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#10B981', color: 'white', cursor: 'pointer', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 10px 15px rgba(16, 185, 129, 0.2)', transition: '0.3s' }, 
-  qrGeneralContainer: { marginTop: '40px', paddingTop: '30px', borderTop: '1px dashed rgba(255,255,255,0.1)' },
-  qrBox: { background: 'white', padding: '10px', borderRadius: '18px', display: 'inline-block', border: '4px solid #10B981' },
-  sidebarHeader: { padding: '30px 24px', display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid #F1F5F9' },
-  sidebarLogoBox: { background: '#10B981', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(16, 185, 129, 0.2)' },
-  sidebarBrandName: { fontSize: '22px', fontWeight: '900', color: '#1E293B', lineHeight: 1 },
-  sidebarBrandSlogan: { fontSize: '9px', color: '#10B981', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginTop: '4px' },
-  mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)' },
-  sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, backdropFilter: 'blur(4px)' },
-  verifCard: { flex: 1, display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', borderRadius: '12px', border: '2px solid', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', transition: '0.2s' },
-  emptyCircle: { width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #CBD5E1' }
-};
-
-const modalStyles = { 
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, backdropFilter: 'blur(8px)' }, 
-  content: { background: 'white', padding: '25px', borderRadius: '25px', width: '90%', maxHeight: '95vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }, 
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }, 
-  input: { padding: '12px 15px', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '14px', width: '100%', boxSizing: 'border-box', outline: 'none' }, 
-  btnSaveWI: { padding: '15px', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }, 
-  btnClose: { background: '#F1F5F9', border: 'none', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%' } 
-};
+const uiStyles = { loginOverlay: { height: '100vh', width: '100vw', background: 'radial-gradient(circle at top left, #0f172a, #020617)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: "'Inter', sans-serif" }, loginCard: { background: 'rgba(255, 255, 255, 0.03)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '50px 40px', borderRadius: '40px', textAlign: 'center', width: '90%', maxWidth: '440px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }, loginHeader: { marginBottom: '35px' }, logoBox: { background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', width: '80px', height: '80px', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)' }, loginTitle: { color: '#ffffff', fontSize: '36px', fontWeight: '900', margin: 0, letterSpacing: '-1px' }, loginSubtitle: { color: '#94A3B8', fontSize: '14px', margin: '5px 0 0 0' }, loginSlogan: { color: '#10B981', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '2px', marginTop: '10px' }, loginForm: { display: 'flex', flexDirection: 'column', gap: '15px' }, inputWrapper: { display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.05)', padding: '0 18px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }, loginInput: { background: 'transparent', border: 'none', color: '#ffffff', padding: '16px 0', fontSize: '15px', width: '100%', outline: 'none' }, loginBtnAdmin: { width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#10B981', color: 'white', cursor: 'pointer', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 10px 15px rgba(16, 185, 129, 0.2)', transition: '0.3s' }, qrGeneralContainer: { marginTop: '40px', paddingTop: '30px', borderTop: '1px dashed rgba(255,255,255,0.1)' }, qrBox: { background: 'white', padding: '10px', borderRadius: '18px', display: 'inline-block', border: '4px solid #10B981' }, sidebarHeader: { padding: '30px 24px', display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid #F1F5F9' }, sidebarLogoBox: { background: '#10B981', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(16, 185, 129, 0.2)' }, sidebarBrandName: { fontSize: '22px', fontWeight: '900', color: '#1E293B', lineHeight: 1 }, sidebarBrandSlogan: { fontSize: '9px', color: '#10B981', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginTop: '4px' }, mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)' }, sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, backdropFilter: 'blur(4px)' }, verifCard: { flex: 1, display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', borderRadius: '12px', border: '2px solid', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', transition: '0.2s' }, emptyCircle: { width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #CBD5E1' } };
+const modalStyles = { overlay: { position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, backdropFilter: 'blur(8px)' }, content: { background: 'white', padding: '25px', borderRadius: '25px', width: '90%', maxHeight: '95vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }, header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }, input: { padding: '12px 15px', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '14px', width: '100%', boxSizing: 'border-box', outline: 'none' }, btnSaveWI: { padding: '15px', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }, btnClose: { background: '#F1F5F9', border: 'none', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%' } };
 
 export default App;
