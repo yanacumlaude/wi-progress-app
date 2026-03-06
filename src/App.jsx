@@ -4,7 +4,7 @@ import Sidebar from "./components/Sidebar";
 import { 
   Menu, X, ShieldCheck, Upload, CheckCircle, 
   FileText, CheckCircle2, ShieldAlert, BookOpen, 
-  Lock, ArrowRight, User
+  Lock, ArrowRight, User, LogOut
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react"; 
 
@@ -48,7 +48,10 @@ function App() {
     is_archived: false,
     is_verified_eng: true, 
     is_verified_qc: false, 
-    is_verified_prod: false 
+    is_verified_prod: false,
+    verified_by_eng: "", 
+    verified_by_qc: "",  
+    verified_by_prod: "" 
   };
 
   const [newWI, setNewWI] = useState(initialWIState);
@@ -83,6 +86,14 @@ function App() {
   };
 
   useEffect(() => { 
+    const savedUser = localStorage.getItem("nibook_user");
+    const savedRole = localStorage.getItem("nibook_role");
+    
+    if (savedUser && savedRole) {
+      setUserSession(savedUser);
+      setRole(savedRole);
+    }
+
     fetchData();
     fetchLogs();
     
@@ -111,6 +122,8 @@ function App() {
       if (data) {
         setUserSession(data.username);
         setRole(data.role);
+        localStorage.setItem("nibook_user", data.username);
+        localStorage.setItem("nibook_role", data.role);
         writeLog("LOGIN", "Sistem Dashboard", `${data.username} masuk`);
       } else {
         alert("Nama Divisi atau Password Salah!");
@@ -118,25 +131,30 @@ function App() {
     } catch (err) { alert("Gagal terhubung ke database!"); }
   };
 
+  const handleLogout = (e) => {
+    if (e) e.preventDefault();
+    if (window.confirm("Apakah anda yakin ingin keluar?")) {
+      writeLog("LOGOUT", "Sistem Dashboard", `${userSession} keluar`);
+      localStorage.removeItem("nibook_user");
+      localStorage.removeItem("nibook_role");
+      setUserSession("");
+      setRole("unauthenticated");
+      setMenu("dashboard");
+    }
+  };
+
   const handleFileUpload = async (e, isEdit = false) => {
     const file = e.target.files[0];
     if (!file || file.type !== "application/pdf") return alert("Hanya PDF!");
     if (file.size > 2 * 1024 * 1024) return alert("Maksimal 2MB!");
-
     try {
       setIsUploading(true);
       const fileName = `${Date.now()}_${file.name.replace(/\s/g, '_')}`; 
       const filePath = `wi_documents/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('wi-files')
-        .upload(filePath, file);
-
+      const { error: uploadError } = await supabase.storage.from('wi-files').upload(filePath, file);
       if (uploadError) throw uploadError;
-
       if (isEdit) setEditingWI({ ...editingWI, file_url: filePath });
       else setNewWI({ ...newWI, file_url: filePath });
-      
       alert("Upload Berhasil!");
     } catch (error) { alert("Gagal upload: " + error.message); } 
     finally { setIsUploading(false); }
@@ -145,50 +163,27 @@ function App() {
   const handleSaveWI = async (e) => {
     e.preventDefault();
     if (!newWI.remarks || newWI.remarks.length < 5) return alert("Remarks (Alasan) wajib diisi!");
-
     try {
       setIsUploading(true);
-      const payload = {
-        customer: newWI.customer,
-        part_number: newWI.part_number,
-        model: newWI.model,
-        location: newWI.location,
-        is_logo_updated: Boolean(newWI.is_logo_updated),
-        condition: newWI.condition,
-        mold_number: newWI.mold_number,
-        is_6_sisi: Boolean(newWI.is_6_sisi),
-        remarks: newWI.remarks,
-        status_oc: "Open",
-        date_created: new Date().toLocaleDateString('id-ID'),
-        file_url: newWI.file_url,
-        process_name: newWI.process_name,
-        revision_no: newWI.revision_no,
-        is_archived: false,
-        is_verified_eng: Boolean(newWI.is_verified_eng),
-        is_verified_qc: Boolean(newWI.is_verified_qc),
-        is_verified_prod: Boolean(newWI.is_verified_prod)
-      };
-
+      const payload = { ...newWI, date_created: new Date().toLocaleDateString('id-ID'), status_oc: "Open", is_archived: false };
+      
       await supabase
         .from('wi_data')
         .update({ is_archived: true })
         .eq('part_number', payload.part_number)
+        .eq('process_name', payload.process_name) 
         .eq('is_archived', false);
 
       const { error } = await supabase.from('wi_data').insert([payload]);
       if (error) throw error;
 
-      await writeLog("CREATE", payload.part_number, `New Rev: ${payload.revision_no}`);
+      await writeLog("CREATE", payload.part_number, `New Rev: ${payload.revision_no} (${payload.process_name})`);
       alert("Master WI Berhasil Disimpan!"); 
       setIsModalInputWI(false); 
       setNewWI(initialWIState); 
       fetchData(); 
-    } catch (err) { 
-      console.error("Save Error:", err);
-      alert("Error: " + err.message); 
-    } finally {
-      setIsUploading(false);
-    }
+    } catch (err) { alert("Error: " + err.message); } 
+    finally { setIsUploading(false); }
   };
 
   const handleUpdateWI = async (e) => {
@@ -197,13 +192,11 @@ function App() {
       const { id, ...updateData } = editingWI;
       const { error } = await supabase.from('wi_data').update(updateData).eq('id', id);
       if (error) throw error;
-      await writeLog("UPDATE", editingWI.part_number, "Data updated");
+      await writeLog("UPDATE", editingWI.part_number, "Data updated & verified");
       alert("Berhasil Diperbarui!"); 
       setIsModalEditWI(false); 
       fetchData(); 
-    } catch (err) {
-      alert("Update Gagal: " + err.message);
-    }
+    } catch (err) { alert("Update Gagal: " + err.message); }
   };
 
   const handleDeleteWI = async (id, fileUrl) => {
@@ -212,65 +205,30 @@ function App() {
       try {
         if (fileUrl) {
           let pathToDelete = fileUrl;
-          if (fileUrl.includes('wi-files/')) {
-            pathToDelete = fileUrl.split('wi-files/').pop().split('?')[0];
-          } else if (!fileUrl.includes('wi_documents/')) {
-            pathToDelete = `wi_documents/${fileUrl}`;
-          }
-
-          console.log("Menghapus dari storage:", pathToDelete);
-          const { error: storageError } = await supabase.storage.from('wi-files').remove([pathToDelete]);
-          if (storageError) console.error("Storage delete warning:", storageError.message);
+          if (fileUrl.includes('wi-files/')) pathToDelete = fileUrl.split('wi-files/').pop().split('?')[0];
+          else if (!fileUrl.includes('wi_documents/')) pathToDelete = `wi_documents/${fileUrl}`;
+          await supabase.storage.from('wi-files').remove([pathToDelete]);
         }
-
         const { error: dbError } = await supabase.from('wi_data').delete().eq('id', id);
         if (dbError) throw dbError;
-
         await writeLog("DELETE", item?.part_number, "Deleted from system");
         alert("Data & File Berhasil Dihapus!");
         fetchData();
-      } catch (err) { 
-        alert("Gagal hapus: " + err.message); 
-      }
+      } catch (err) { alert("Gagal hapus: " + err.message); }
     }
   };
 
-  // --- FINAL FIXED PREVIEW FUNCTION ---
   const handleOpenPreview = async (path) => {
     if (!path) return alert("File tidak ditemukan!");
-    
     try {
-      // 1. Membersihkan path dari URL mentah atau query string
       let cleanPath = path.split('?')[0]; 
-      
-      // Jika path mengandung folder storage (wi-files), ambil bagian setelahnya
-      if (cleanPath.includes('wi-files/')) {
-        cleanPath = cleanPath.split('wi-files/').pop();
-      }
-
-      // Pastikan tidak ada karakter '/' di depan agar tidak terbaca sebagai root salah
+      if (cleanPath.includes('wi-files/')) cleanPath = cleanPath.split('wi-files/').pop();
       cleanPath = cleanPath.replace(/^\/+/, '');
-
-      console.log("Mencoba akses file di path:", cleanPath);
-
-      // 2. Request Signed URL ke Supabase
-      const { data, error } = await supabase.storage
-        .from('wi-files')
-        .createSignedUrl(cleanPath, 3600); // Link valid 1 jam
-      
-      if (error) {
-        console.error("Supabase Storage Error:", error);
-        throw new Error(`File gagal diambil (${error.message}). Pastikan Role 'anon' sudah di-allow di Policy SELECT.`);
-      }
-      
-      if (!data?.signedUrl) throw new Error("Gagal generate link akses.");
-      
+      const { data, error } = await supabase.storage.from('wi-files').createSignedUrl(cleanPath, 3600);
+      if (error) throw error;
       setPreviewUrl(data.signedUrl);
       setIsPreviewOpen(true);
-    } catch (err) {
-      alert("Akses Dokumen Gagal: " + err.message);
-      console.error("Preview Error Detail:", err);
-    }
+    } catch (err) { alert("Akses Dokumen Gagal: " + err.message); }
   };
 
   const renderContent = () => {
@@ -280,7 +238,17 @@ function App() {
         const displayWI = role === 'admin' 
           ? wiList 
           : wiList.filter(item => !item.is_archived && item.is_verified_eng && item.is_verified_qc && item.is_verified_prod);
-        return <WICenterLibrary wiList={displayWI} role={role} storageUsage={storageUsage} onEdit={(wi) => { setEditingWI(wi); setIsModalEditWI(true); }} onOpenInputModal={() => setIsModalInputWI(true)} onDelete={handleDeleteWI} onPreview={handleOpenPreview} />;
+        return (
+          <WICenterLibrary 
+            wiList={displayWI} 
+            role={role} 
+            storageUsage={storageUsage} 
+            onEdit={(wi) => { setEditingWI(wi); setIsModalEditWI(true); }} 
+            onOpenInputModal={() => setIsModalInputWI(true)} 
+            onDelete={handleDeleteWI} 
+            onPreview={handleOpenPreview} 
+          />
+        );
       case "logs": return <ActivityLog logs={logs} />; 
       default: return <Dashboard wiList={wiList} logs={logs} />;
     }
@@ -291,32 +259,18 @@ function App() {
       <div style={uiStyles.loginOverlay}>
         <div style={uiStyles.loginCard}>
           <div style={uiStyles.loginHeader}>
-            <div style={uiStyles.logoBox}>
-              <BookOpen size={40} color="#ffffff" strokeWidth={2.5} />
-            </div>
+            <div style={uiStyles.logoBox}><BookOpen size={40} color="#ffffff" strokeWidth={2.5} /></div>
             <h1 style={uiStyles.loginTitle}>NiBook</h1>
             <p style={uiStyles.loginSubtitle}>Work Instruction Management Hub</p>
             <p style={uiStyles.loginSlogan}>All for dreams</p>
           </div>
-
           <form onSubmit={handleLogin} style={uiStyles.loginForm}>
-            <div style={uiStyles.inputWrapper}>
-               <User size={18} color="#94A3B8" />
-               <input name="divisi" placeholder="Username / Division" required style={uiStyles.loginInput} />
-            </div>
-            <div style={uiStyles.inputWrapper}>
-               <Lock size={18} color="#94A3B8" />
-               <input name="password" type="password" placeholder="Password" required style={uiStyles.loginInput} />
-            </div>
-            <button type="submit" style={uiStyles.loginBtnAdmin}>
-              Sign In <ArrowRight size={18} />
-            </button>
+            <div style={uiStyles.inputWrapper}><User size={18} color="#94A3B8" /><input name="divisi" placeholder="Username / Division" required style={uiStyles.loginInput} /></div>
+            <div style={uiStyles.inputWrapper}><Lock size={18} color="#94A3B8" /><input name="password" type="password" placeholder="Password" required style={uiStyles.loginInput} /></div>
+            <button type="submit" style={uiStyles.loginBtnAdmin}>Sign In <ArrowRight size={18} /></button>
           </form>
-
           <div style={uiStyles.qrGeneralContainer}>
-              <div style={uiStyles.qrBox}>
-                <QRCodeCanvas value={`${window.location.origin}?mode=library`} size={90} />
-              </div>
+              <div style={uiStyles.qrBox}><QRCodeCanvas value={`${window.location.origin}?mode=library`} size={90} /></div>
               <p style={{fontSize: '11px', color: '#94A3B8', marginTop: '12px', fontWeight: '600'}}>SCAN FOR GUEST ACCESS</p>
           </div>
         </div>
@@ -332,23 +286,43 @@ function App() {
 
       {isSidebarOpen && window.innerWidth < 768 && <div onClick={() => setIsSidebarOpen(false)} style={uiStyles.sidebarOverlay} />}
 
-      <div style={{ width: isSidebarOpen ? '260px' : '0', transition: '0.4s cubic-bezier(0.4, 0, 0.2, 1)', position: 'fixed', height: '100vh', zIndex: 3000, overflow: 'hidden', background: '#ffffff', borderRight: '1px solid #E2E8F0', boxShadow: '10px 0 30px rgba(0,0,0,0.02)' }}>
+      <div style={{ 
+        width: isSidebarOpen ? '260px' : '0', 
+        transition: '0.4s cubic-bezier(0.4, 0, 0.2, 1)', 
+        position: 'fixed', 
+        height: '100vh', 
+        zIndex: 3000, 
+        overflow: 'hidden', 
+        background: '#ffffff', 
+        borderRight: '1px solid #E2E8F0', 
+        boxShadow: '10px 0 30px rgba(0,0,0,0.02)',
+        display: 'flex', 
+        flexDirection: 'column'
+      }}>
         <div style={uiStyles.sidebarHeader}>
-            <div style={uiStyles.sidebarLogoBox}>
-              <BookOpen size={22} color="#ffffff" strokeWidth={3} />
-            </div>
+            <div style={uiStyles.sidebarLogoBox}><BookOpen size={22} color="#ffffff" strokeWidth={3} /></div>
             <div style={{display:'flex', flexDirection:'column'}}>
               <span style={uiStyles.sidebarBrandName}>NiBook</span>
               <span style={uiStyles.sidebarBrandSlogan}>All for dreams</span>
             </div>
         </div>
-        <Sidebar role={role} menu={menu} setMenu={(m) => { setMenu(m); if(window.innerWidth < 768) setIsSidebarOpen(false); }} userSession={userSession} />
+
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <Sidebar 
+            role={role} 
+            menu={menu} 
+            setMenu={(m) => { setMenu(m); if(window.innerWidth < 768) setIsSidebarOpen(false); }} 
+            userSession={userSession} 
+            onLogout={handleLogout}
+          />
+        </div>
       </div>
       
       <main style={{ flex: 1, padding: window.innerWidth < 768 ? '20px 15px' : '30px', marginLeft: isSidebarOpen && window.innerWidth > 768 ? '260px' : '0', transition: '0.4s cubic-bezier(0.4, 0, 0.2, 1)', width: '100%' }}>
         {renderContent()}
       </main>
 
+      {/* --- MODALS --- (Tetap Sama) */}
       {isModalInputWI && (
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, maxWidth: '650px'}}>
@@ -373,14 +347,25 @@ function App() {
                 <p style={{fontSize: '11px', fontWeight: '800', color: '#475569', marginBottom: '10px'}}>PHYSICAL VERIFICATION CHECKLIST</p>
                 <div style={{display: 'flex', gap: '8px'}}>
                   {['eng', 'qc', 'prod'].map(dept => (
-                    <label key={dept} style={{...uiStyles.verifCard, 
-                      borderColor: newWI[`is_verified_${dept}`] ? '#10B981' : '#E2E8F0',
-                      background: newWI[`is_verified_${dept}`] ? '#F0FDF4' : 'white'
-                    }}>
-                      <input type="checkbox" checked={newWI[`is_verified_${dept}`]} onChange={e=>setNewWI({...newWI, [`is_verified_${dept}`]: e.target.checked})} style={{display:'none'}} />
-                      {newWI[`is_verified_${dept}`] ? <CheckCircle2 size={16} color="#10B981" /> : <div style={uiStyles.emptyCircle} />}
-                      <span style={{color: newWI[`is_verified_${dept}`] ? '#065F46' : '#64748B'}}>{dept.toUpperCase()}</span>
-                    </label>
+                    <div key={dept} style={{flex:1, display:'flex', flexDirection:'column', gap:'5px'}}>
+                      <label style={{...uiStyles.verifCard, 
+                        borderColor: newWI[`is_verified_${dept}`] ? '#10B981' : '#E2E8F0',
+                        background: newWI[`is_verified_${dept}`] ? '#F0FDF4' : 'white'
+                      }}>
+                        <input type="checkbox" checked={newWI[`is_verified_${dept}`]} onChange={e=>setNewWI({...newWI, [`is_verified_${dept}`]: e.target.checked})} style={{display:'none'}} />
+                        {newWI[`is_verified_${dept}`] ? <CheckCircle2 size={16} color="#10B981" /> : <div style={uiStyles.emptyCircle} />}
+                        <span>{dept === 'qc' ? 'QA/QC' : dept.toUpperCase()}</span>
+                      </label>
+                      {newWI[`is_verified_${dept}`] && (
+                        <input 
+                          style={{...modalStyles.input, fontSize:'10px', padding:'5px 8px'}} 
+                          placeholder={`Nama ${dept === 'qc' ? 'QA/QC' : dept.toUpperCase()}`}
+                          value={newWI[`verified_by_${dept}`]}
+                          onChange={e => setNewWI({...newWI, [`verified_by_${dept}`]: e.target.value})}
+                          required
+                        />
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -414,15 +399,25 @@ function App() {
               <div style={verifContainer}>
                 <div style={{display: 'flex', gap: '8px'}}>
                   {['eng', 'qc', 'prod'].map(dept => (
-                    <label key={dept} style={{...uiStyles.verifCard, 
-                      borderColor: editingWI[`is_verified_${dept}`] ? '#10B981' : '#E2E8F0',
-                      background: editingWI[`is_verified_${dept}`] ? '#F0FDF4' : 'white',
-                      flex: 1
-                    }}>
-                      <input type="checkbox" checked={editingWI[`is_verified_${dept}`]} onChange={e=>setEditingWI({...editingWI, [`is_verified_${dept}`]: e.target.checked})} style={{display:'none'}} />
-                      {editingWI[`is_verified_${dept}`] ? <CheckCircle2 size={16} color="#10B981" /> : <div style={uiStyles.emptyCircle} />}
-                      <span>{dept.toUpperCase()}</span>
-                    </label>
+                    <div key={dept} style={{flex:1, display:'flex', flexDirection:'column', gap:'5px'}}>
+                      <label style={{...uiStyles.verifCard, 
+                        borderColor: editingWI[`is_verified_${dept}`] ? '#10B981' : '#E2E8F0',
+                        background: editingWI[`is_verified_${dept}`] ? '#F0FDF4' : 'white',
+                      }}>
+                        <input type="checkbox" checked={editingWI[`is_verified_${dept}`]} onChange={e=>setEditingWI({...editingWI, [`is_verified_${dept}`]: e.target.checked})} style={{display:'none'}} />
+                        {editingWI[`is_verified_${dept}`] ? <CheckCircle2 size={16} color="#10B981" /> : <div style={uiStyles.emptyCircle} />}
+                        <span>{dept === 'qc' ? 'QA/QC' : dept.toUpperCase()}</span>
+                      </label>
+                      {editingWI[`is_verified_${dept}`] && (
+                        <input 
+                          style={{...modalStyles.input, fontSize:'10px', padding:'5px 8px'}} 
+                          placeholder={`Nama ${dept === 'qc' ? 'QA/QC' : dept.toUpperCase()}`}
+                          value={editingWI[`verified_by_${dept}`] || ""}
+                          onChange={e => setEditingWI({...editingWI, [`verified_by_${dept}`]: e.target.value})}
+                          required
+                        />
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -441,10 +436,9 @@ function App() {
         <div style={modalStyles.overlay}>
           <div style={{...modalStyles.content, maxWidth: '95vw', width: '1100px', height: '90vh', padding: '10px'}}>
             <div style={modalStyles.header}>
-               <h3 style={{margin:0}}>Dokumen Preview</h3>
-               <button onClick={() => setIsPreviewOpen(false)} style={modalStyles.btnClose}>×</button>
+                <h3 style={{margin:0}}>Dokumen Preview</h3>
+                <button onClick={() => setIsPreviewOpen(false)} style={modalStyles.btnClose}>×</button>
             </div>
-            {/* Menggunakan signedUrl dari Supabase secara langsung */}
             <iframe src={previewUrl} title="Document Preview" style={{width: '100%', height: 'calc(100% - 50px)', borderRadius: '12px', border: 'none'}} />
           </div>
         </div>
@@ -453,12 +447,41 @@ function App() {
   );
 }
 
-// Styles (Dibiarkan Sesuai Aslinya)
+// ... (Gunakan UI Styles yang sama dengan aslimu)
 const grid2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' };
 const labelS = { fontSize: '10px', fontWeight: '800', color: '#94A3B8', marginBottom: '4px', display: 'block' };
 const verifContainer = { background: '#F8FAFC', padding: '15px', borderRadius: '15px', border: '1px solid #E2E8F0' };
 const uploadStyles = { container: { border: '2px dashed #E2E8F0', borderRadius: '12px', padding: '10px', textAlign: 'center', background: '#F8FAFC' }, label: { cursor: 'pointer', display: 'block' }, inner: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40px', gap: '10px', fontSize: '14px', fontWeight: '600' } };
-const uiStyles = { loginOverlay: { height: '100vh', width: '100vw', background: 'radial-gradient(circle at top left, #0f172a, #020617)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: "'Inter', sans-serif" }, loginCard: { background: 'rgba(255, 255, 255, 0.03)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '50px 40px', borderRadius: '40px', textAlign: 'center', width: '90%', maxWidth: '440px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }, loginHeader: { marginBottom: '35px' }, logoBox: { background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', width: '80px', height: '80px', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)' }, loginTitle: { color: '#ffffff', fontSize: '36px', fontWeight: '900', margin: 0, letterSpacing: '-1px' }, loginSubtitle: { color: '#94A3B8', fontSize: '14px', margin: '5px 0 0 0' }, loginSlogan: { color: '#10B981', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '2px', marginTop: '10px' }, loginForm: { display: 'flex', flexDirection: 'column', gap: '15px' }, inputWrapper: { display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.05)', padding: '0 18px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }, loginInput: { background: 'transparent', border: 'none', color: '#ffffff', padding: '16px 0', fontSize: '15px', width: '100%', outline: 'none' }, loginBtnAdmin: { width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#10B981', color: 'white', cursor: 'pointer', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 10px 15px rgba(16, 185, 129, 0.2)', transition: '0.3s' }, qrGeneralContainer: { marginTop: '40px', paddingTop: '30px', borderTop: '1px dashed rgba(255,255,255,0.1)' }, qrBox: { background: 'white', padding: '10px', borderRadius: '18px', display: 'inline-block', border: '4px solid #10B981' }, sidebarHeader: { padding: '30px 24px', display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid #F1F5F9' }, sidebarLogoBox: { background: '#10B981', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(16, 185, 129, 0.2)' }, sidebarBrandName: { fontSize: '22px', fontWeight: '900', color: '#1E293B', lineHeight: 1 }, sidebarBrandSlogan: { fontSize: '9px', color: '#10B981', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginTop: '4px' }, mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)' }, sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, backdropFilter: 'blur(4px)' }, verifCard: { flex: 1, display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', borderRadius: '12px', border: '2px solid', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', transition: '0.2s' }, emptyCircle: { width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #CBD5E1' } };
-const modalStyles = { overlay: { position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, backdropFilter: 'blur(8px)' }, content: { background: 'white', padding: '25px', borderRadius: '25px', width: '90%', maxHeight: '95vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }, header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }, input: { padding: '12px 15px', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '14px', width: '100%', boxSizing: 'border-box', outline: 'none' }, btnSaveWI: { padding: '15px', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }, btnClose: { background: '#F1F5F9', border: 'none', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%' } };
+const uiStyles = { 
+  loginOverlay: { height: '100vh', width: '100vw', background: 'radial-gradient(circle at top left, #0f172a, #020617)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: "'Inter', sans-serif" }, 
+  loginCard: { background: 'rgba(255, 255, 255, 0.03)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '50px 40px', borderRadius: '40px', textAlign: 'center', width: '90%', maxWidth: '440px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }, 
+  loginHeader: { marginBottom: '35px' }, 
+  logoBox: { background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', width: '80px', height: '80px', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)' }, 
+  loginTitle: { color: '#ffffff', fontSize: '36px', fontWeight: '900', margin: 0, letterSpacing: '-1px' }, 
+  loginSubtitle: { color: '#94A3B8', fontSize: '14px', margin: '5px 0 0 0' }, 
+  loginSlogan: { color: '#10B981', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '2px', marginTop: '10px' }, 
+  loginForm: { display: 'flex', flexDirection: 'column', gap: '15px' }, 
+  inputWrapper: { display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.05)', padding: '0 18px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }, 
+  loginInput: { background: 'transparent', border: 'none', color: '#ffffff', padding: '16px 0', fontSize: '15px', width: '100%', outline: 'none' }, 
+  loginBtnAdmin: { width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#10B981', color: 'white', cursor: 'pointer', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 10px 15px rgba(16, 185, 129, 0.2)', transition: '0.3s' }, 
+  qrGeneralContainer: { marginTop: '40px', paddingTop: '30px', borderTop: '1px dashed rgba(255,255,255,0.1)' }, 
+  qrBox: { background: 'white', padding: '10px', borderRadius: '18px', display: 'inline-block', border: '4px solid #10B981' }, 
+  sidebarHeader: { padding: '30px 24px', display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid #F1F5F9' }, 
+  sidebarLogoBox: { background: '#10B981', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(16, 185, 129, 0.2)' }, 
+  sidebarBrandName: { fontSize: '22px', fontWeight: '900', color: '#1E293B', lineHeight: 1 }, 
+  sidebarBrandSlogan: { fontSize: '9px', color: '#10B981', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginTop: '4px' }, 
+  mobileBtn: { position: 'fixed', bottom: '20px', right: '20px', zIndex: 4000, background: '#10B981', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.3)' }, 
+  sidebarOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, backdropFilter: 'blur(4px)' }, 
+  verifCard: { flex: 1, display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', borderRadius: '12px', border: '2px solid', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', transition: '0.2s' }, 
+  emptyCircle: { width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #CBD5E1' } 
+};
+const modalStyles = { 
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, backdropFilter: 'blur(8px)' }, 
+  content: { background: 'white', padding: '25px', borderRadius: '25px', width: '90%', maxHeight: '95vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }, 
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }, 
+  input: { padding: '12px 15px', borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '14px', width: '100%', boxSizing: 'border-box', outline: 'none' }, 
+  btnSaveWI: { padding: '15px', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }, 
+  btnClose: { background: '#F1F5F9', border: 'none', fontSize: '20px', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%' } 
+};
 
 export default App;
